@@ -142,7 +142,8 @@ automatic instead, which is the whole reason to publish it:
 
 ## Finding something
 
-A box in the bar, beside the drawer of components. The names of frames come first,
+One icon at the end of the bar, which opens into a box when it is pressed: a board is
+for looking at the work, and a search box sits there empty most of the day. The names of frames come first,
 because that is what anybody remembers; under them, what is written inside the frames,
 found by reading the file behind each one. Pressing a result takes the board to that
 frame and fits it in the window. Typing waits for a pause rather than asking on every

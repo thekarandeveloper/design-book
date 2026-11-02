@@ -117,8 +117,6 @@ export function App() {
           </nav>
         )}
 
-        <Search onPick={id => { go('/pages'); setFocus(id); }} />
-
         <button
           className={'st-icon' + (route.view === 'components' ? ' is-on' : '')}
           onClick={() => go(route.view === 'components' ? '/pages' : '/components')}
@@ -127,6 +125,8 @@ export function App() {
         >
           <GridIcon />
         </button>
+
+        <Search onPick={id => { go('/pages'); setFocus(id); }} />
       </header>
     </div>
   );
@@ -315,6 +315,9 @@ function PlusIcon() {
 // frames after it, under its own heading, because a word from a headline is often all
 // you have. Pressing a result takes the board to that frame and fits it in the window.
 function Search({ onPick }) {
+  // Shut, it is one icon in the bar. Open, it is a box: a board is for looking at the
+  // work, and a search box sits there empty most of the day.
+  const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [found, setFound] = useState(null);
   const [at, setAt] = useState(0);        // which result the keyboard is on
@@ -335,10 +338,15 @@ function Search({ onPick }) {
   }, [q]);
 
   useEffect(() => {
-    const away = ev => { if (box.current && !box.current.contains(ev.target)) setFound(null); };
+    const away = ev => {
+      if (box.current && box.current.contains(ev.target)) return;
+      setFound(null);
+      // It shuts again when there is nothing in it, and stays open when there is.
+      if (!q.trim()) setOpen(false);
+    };
     window.addEventListener('pointerdown', away, true);
     return () => window.removeEventListener('pointerdown', away, true);
-  }, []);
+  }, [q]);
 
   const rows = [
     ...((found && found.titles) || []).map(t => ({ kind: 'name', id: t.id, title: t.title, note: t.where })),
@@ -352,11 +360,17 @@ function Search({ onPick }) {
     if (!row) return;
     setFound(null);
     setQ('');
+    setOpen(false);
     onPick(row.id);
   };
 
   const onKey = ev => {
-    if (ev.key === 'Escape') { setFound(null); ev.currentTarget.blur(); return; }
+    if (ev.key === 'Escape') {
+      setFound(null);
+      if (q) setQ('');
+      else { setOpen(false); ev.currentTarget.blur(); }
+      return;
+    }
     if (!rows.length) return;
     if (ev.key === 'ArrowDown') { ev.preventDefault(); setAt(n => Math.min(rows.length - 1, n + 1)); }
     if (ev.key === 'ArrowUp') { ev.preventDefault(); setAt(n => Math.max(0, n - 1)); }
@@ -367,6 +381,19 @@ function Search({ onPick }) {
   const inside = rows.filter(r => r.kind === 'inside');
   const line = row => rows.indexOf(row);
 
+  if (!open) {
+    return (
+      <button
+        className="st-icon"
+        title="Find a frame"
+        aria-label="Find a frame"
+        onClick={() => setOpen(true)}
+      >
+        <SearchIcon />
+      </button>
+    );
+  }
+
   return (
     <div className="st-search" ref={box}>
       <SearchIcon />
@@ -374,9 +401,9 @@ function Search({ onPick }) {
         className="st-search-box"
         placeholder="Find a frame"
         value={q}
+        autoFocus
         onChange={e => setQ(e.target.value)}
         onKeyDown={onKey}
-        onFocus={() => { if (q.trim().length > 1 && !found) setQ(q); }}
       />
       {q.trim().length > 1 && found ? (
         <div className="st-search-found">
