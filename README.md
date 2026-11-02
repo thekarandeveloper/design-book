@@ -76,9 +76,13 @@ settle, and the answer came back as one screenful. A page its dev server has nev
 can take most of a minute to answer the first time, and the size says `measuring` while
 it does.
 
-**The right button** opens what can be done to a frame, where the pointer already is:
+**The right button**, or the `...` on the frame's name, opens what can be done to it:
 copy its name, export it, load the page again, fit the content, check it, rename it,
 throw it away.
+
+Both ways, because the right button is not the board's to rely on: inside an editor's
+panel the editor can take it before the page sees it, and then nothing happens at all.
+The `...` shows itself when the name is hovered or the frame is chosen.
 
 Because of that, a frame carries nothing but its name. A row of buttons over every frame
 is a row you read past, and the board is for looking at the work.

@@ -288,12 +288,28 @@ export function Board({
       }
       wheelBeat.ask();
     };
+    // Taken in the capture phase, before anything else in the page, and refused loudly
+    // so the editor around it does not put its own menu over the board.
+    const onMenu = ev => {
+      const node = ev.target.closest && ev.target.closest('.st-frame');
+      if (!node) return;
+      const id = node.getAttribute('data-id');
+      const f = frames.find(frame => frame.id === id);
+      if (!f) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      select(f.id);
+      setMenu({ frame: f, x: ev.clientX, y: ev.clientY });
+    };
+    el.addEventListener('contextmenu', onMenu, true);
+
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       wheelBeat.stop();
+      el.removeEventListener('contextmenu', onMenu, true);
       el.removeEventListener('wheel', onWheel);
     };
-  }, [zoomAt, move]);
+  }, [zoomAt, move, frames, select]);
 
   useEffect(() => {
     const onKey = ev => {
@@ -442,6 +458,7 @@ export function Board({
         return (
           <div
             key={f.id}
+            data-id={f.id}
             className={'st-frame' + (isSelected ? ' is-selected' : '') + (f.id === inside ? ' is-inside' : '') + (isDragging ? ' is-moving' : '')}
             style={{
               left: f.x,
@@ -599,6 +616,24 @@ export function Board({
                   {f.title}
                 </b>
               )}
+              {/* One press that always works. The right button is not ours to rely on:
+                  inside an editor's panel the editor can take it before the page ever
+                  sees it, and then nothing happens, which is worse than no menu at all. */}
+              <button
+                className="st-bar-more"
+                title="What can be done to this frame"
+                aria-label="What can be done to this frame"
+                onPointerDown={ev => ev.stopPropagation()}
+                onClick={ev => {
+                  ev.stopPropagation();
+                  select(f.id);
+                  const box = ev.currentTarget.getBoundingClientRect();
+                  setMenu({ frame: f, x: Math.round(box.left), y: Math.round(box.bottom + 4) });
+                }}
+              >
+                <MoreIcon />
+              </button>
+
               {/* The name, and what the board has to say about this frame right now.
                   Everything you can do to it is under the right button, so none of it
                   is here: a row of buttons over every frame is a row you read past,
@@ -672,6 +707,16 @@ export function Board({
 //
 // The same things the frame's own bar and its panel offer, in the place a person looks
 // for them: under the right button. Nothing lives only here, so nobody has to find it.
+function MoreIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+      <circle cx="2.5" cy="6" r="1.1" fill="currentColor" />
+      <circle cx="6" cy="6" r="1.1" fill="currentColor" />
+      <circle cx="9.5" cy="6" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}
+
 function Menu({ at, onClose, onReload, onCheck, onFit, onRename, onDelete }) {
   const { frame, x, y } = at;
   const ref = useRef(null);

@@ -349,6 +349,25 @@ html, body, #root { height: 100%; margin: 0; }
   pointer-events: auto;
 }
 
+/* The one press that always opens the menu. Out of the way until the name is hovered or
+   the frame is chosen, because a board is for looking at the work. */
+.st-bar-more {
+  display: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--st-muted);
+  cursor: pointer;
+}
+.st-frame-bar:hover .st-bar-more,
+.st-frame-bar.is-selected .st-bar-more { display: grid; }
+.st-bar-more:hover { background: var(--st-hover); color: var(--st-ink); }
+
 /* Hovered or selected, the name gets a surface behind it so it stays readable wherever
    it falls. Nothing widens it: the name is all there is, and everything you can do to
    the frame is under the right button. */
