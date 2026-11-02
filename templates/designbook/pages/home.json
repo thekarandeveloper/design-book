@@ -1,0 +1,22 @@
+{
+  "title": "Home",
+  "frame": { "width": 390, "height": 844 },
+  "group": "",
+  "data": {
+    "root": { "props": { "title": "Home" } },
+    "content": [
+      { "type": "NavBar", "props": { "id": "nav-1", "title": "Home", "leading": "close" } },
+      {
+        "type": "ScreenBody",
+        "props": {
+          "id": "body-1",
+          "children": [
+            { "type": "TitleBlock", "props": { "id": "t-1", "title": "Home", "subtitle": "What this screen is for, in one line." } },
+            { "type": "CardRows", "props": { "id": "r-1", "context": "system", "rows": "First | A caption | 12\nSecond |  | 4" } }
+          ]
+        }
+      },
+      { "type": "BottomPanel", "props": { "id": "cta-1", "label": "Continue", "variant": "primary", "disabled": false } }
+    ]
+  }
+}

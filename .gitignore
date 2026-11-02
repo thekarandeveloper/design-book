@@ -1,0 +1,10 @@
+# What is fetched rather than written.
+node_modules/
+
+# What is built.
+.build/
+*.vsix
+app/dist/
+
+# macOS
+.DS_Store

@@ -1,0 +1,234 @@
+{
+  "name": "design-book",
+  "displayName": "Design Book",
+  "description": "A book of your project's screens that you open like a file: a .designbook file is the board, the .designbook folder beside it holds its sections, its pieces, its references and the project's real pages, live.",
+  "version": "0.53.0",
+  "publisher": "rachnalabs",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "homepage": "https://www.rachnalabs.com",
+  "keywords": [
+    "design",
+    "design book",
+    "board",
+    "astro",
+    "preview",
+    "claude",
+    "ui",
+    "moodboard"
+  ],
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "galleryBanner": {
+    "color": "#0E1013",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "designbook.board",
+        "displayName": "Design Book",
+        "selector": [
+          {
+            "filenamePattern": "*.designbook"
+          },
+          {
+            "filenamePattern": "*.design"
+          },
+          {
+            "filenamePattern": "*.canvas"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "designbook",
+          "title": "Design Book",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "designbook": [
+        {
+          "id": "designbook.tree",
+          "name": "Boards"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "designbook.tree",
+        "contents": "A board is a file.\n[New board](command:designbook.start)\nIt writes a .designbook file for the board and a .designbook folder beside it for everything the board shows. Open that file any time to come back to it.",
+        "when": "!designbook.hasCanvas"
+      }
+    ],
+    "commands": [
+      {
+        "command": "designbook.start",
+        "title": "Open a Board",
+        "category": "Design Book",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "designbook.open",
+        "title": "Open Board",
+        "category": "Design Book",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "designbook.setUp",
+        "title": "New Board in This Repo",
+        "category": "Design Book",
+        "icon": "$(add)"
+      },
+      {
+        "command": "designbook.newScreen",
+        "title": "New Screen",
+        "category": "Design Book",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "designbook.copyContext",
+        "title": "Copy the Board Context",
+        "category": "Design Book",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "designbook.askClaude",
+        "title": "Ask Claude for a Screen",
+        "category": "Design Book",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "designbook.refresh",
+        "title": "Rescan the Repo",
+        "category": "Design Book",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "designbook.openInBrowser",
+        "title": "Open the Board in a Browser",
+        "category": "Design Book"
+      },
+      {
+        "command": "designbook.revealFolder",
+        "title": "Reveal the .designbook Folder",
+        "category": "Design Book"
+      },
+      {
+        "command": "designbook.restart",
+        "title": "Restart the Board Server",
+        "category": "Design Book"
+      },
+      {
+        "command": "designbook.showLog",
+        "title": "Show the Log",
+        "category": "Design Book"
+      },
+      {
+        "command": "designbook.syncTokens",
+        "title": "Sync tokens.css from a DesignTokens.kt",
+        "category": "Design Book"
+      },
+      {
+        "command": "designbook.openFile",
+        "title": "Open File",
+        "category": "Design Book"
+      },
+      {
+        "command": "designbook.linkClaude",
+        "title": "Point CLAUDE.md at the Board",
+        "category": "Design Book"
+      },
+      {
+        "command": "designbook.newCanvas",
+        "title": "New Board File",
+        "category": "Design Book",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "designbook.installSkill",
+        "title": "Reinstall the Claude Skill",
+        "category": "Design Book"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "designbook.start",
+          "when": "view == designbook.tree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "designbook.refresh",
+          "when": "view == designbook.tree",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "designbook.newScreen",
+          "when": "view == designbook.tree && viewItem == canvas",
+          "group": "inline@1"
+        },
+        {
+          "command": "designbook.askClaude",
+          "when": "view == designbook.tree && viewItem == canvas",
+          "group": "inline@2"
+        },
+        {
+          "command": "designbook.copyContext",
+          "when": "view == designbook.tree && viewItem == canvas",
+          "group": "1_claude"
+        },
+        {
+          "command": "designbook.openInBrowser",
+          "when": "view == designbook.tree && viewItem == canvas",
+          "group": "2_view"
+        },
+        {
+          "command": "designbook.revealFolder",
+          "when": "view == designbook.tree && viewItem == canvas",
+          "group": "3_folder"
+        },
+        {
+          "command": "designbook.syncTokens",
+          "when": "view == designbook.tree && viewItem == canvas",
+          "group": "4_tokens"
+        },
+        {
+          "command": "designbook.restart",
+          "when": "view == designbook.tree && viewItem == canvas",
+          "group": "5_server"
+        },
+        {
+          "command": "designbook.newScreen",
+          "when": "view == designbook.tree && viewItem == section",
+          "group": "inline"
+        },
+        {
+          "command": "designbook.linkClaude",
+          "when": "view == designbook.tree && viewItem == canvas",
+          "group": "1_claude"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "package": "vsce package",
+    "publish": "vsce publish && ovsx publish"
+  }
+}

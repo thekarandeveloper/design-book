@@ -1,0 +1,14 @@
+# What never goes into the package.
+#
+# The board runs on a few hundred megabytes of node packages, which is more than belongs
+# in an extension, so they are fetched on the machine that needs them the first time it
+# is used. Everything else here is either a build output or something only this repo
+# cares about.
+
+app/node_modules/**
+app/dist/**
+**/node_modules/**
+**/.DS_Store
+**/*.vsix
+.vscode/**
+.gitignore

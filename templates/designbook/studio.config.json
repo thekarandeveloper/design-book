@@ -1,0 +1,5 @@
+{
+  "name": "",
+  "frame": { "width": 1440, "height": 900 },
+  "note": "Absorbed into the .designbook board file the first time the board opens. Add a live block here, or in the board file, to point this board at a project's own dev server."
+}

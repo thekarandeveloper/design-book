@@ -1,0 +1,319 @@
+/* The components, in the same shape as iOS `DS.*`.
+ *
+ * Every value here comes from tokens.css, which is generated from DesignTokens.kt. That
+ * is the whole point: a mock built out of these classes translates to SwiftUI one for
+ * one, so `.card--system` is `.dsCard(.system)` and `--space-4` is `DS.Spacing.m`.
+ *
+ * House rules, the same ones the apps follow:
+ *   - No shadows and no elevation.
+ *   - A close button sits on the LEFT of a navigation bar.
+ *   - The last surface on a screen runs off the bottom edge. Never an empty strip.
+ *
+ * TYPE IS THE iOS SCALE on purpose (`DS.Typography`). DesignTokens.kt deliberately keeps
+ * type out, because iOS body is 17pt and Android body is 14sp, and forcing one number on
+ * both makes one platform wrong on every screen. These mocks are drawn for iOS.
+ *
+ * A value marked LOCAL is not in DesignTokens.kt yet. If it should be shared, put it
+ * there and regenerate, rather than editing this file.
+ */
+
+:root {
+  --control-height: 52px;   /* LOCAL: primary button and field height */
+  --row-height: 44px;       /* LOCAL: a tappable list row */
+  --nav-height: 44px;       /* LOCAL: navigation bar */
+  --tab-height: 49px;       /* LOCAL: tab bar, iOS standard */
+  --icon-badge: 40px;       /* Icon badges are always 40x40, per DS.Radius.iconBadge */
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  color: var(--text-primary);
+  background: var(--surface);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── type: DS.Typography ──────────────────────────────────────────────── */
+
+.t-screen-title     { font-size: 28px; font-weight: 700; line-height: 1.2; }
+.t-intro-title      { font-size: 26px; font-weight: 700; line-height: 1.2; }
+.t-section-header   { font-size: 20px; font-weight: 700; line-height: 1.25; }
+.t-card-title       { font-size: 17px; font-weight: 700; line-height: 1.3; }
+.t-button-label     { font-size: 17px; font-weight: 700; line-height: 1.2; }
+.t-body             { font-size: 15px; font-weight: 400; line-height: 1.45; }
+.t-card-description { font-size: 14px; font-weight: 400; line-height: 1.45; }
+.t-caption          { font-size: 13px; font-weight: 400; line-height: 1.4; }
+.t-footer           { font-size: 12px; font-weight: 400; line-height: 1.4; }
+.t-large-value      { font-size: 64px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.t-value-unit       { font-size: 22px; font-weight: 400; }
+.t-picker-row       { font-size: 20px; font-weight: 400; }
+
+/* Primary text states its colour rather than inheriting it. Inside a host that sets its
+   own `color` on an ancestor (the Puck editor does), inherited text silently turns that
+   host's grey, and only the elements with an explicit colour still look right. */
+.t-screen-title,
+.t-intro-title,
+.t-section-header,
+.t-card-title,
+.t-button-label,
+.t-body,
+.t-large-value,
+.t-value-unit,
+.t-picker-row,
+.row-title,
+.nav-title,
+.field-box input { color: var(--text-primary); }
+
+.t-card-description,
+.t-caption,
+.t-footer { color: var(--text-primary); }
+
+.secondary { color: var(--text-secondary); }
+.muted     { color: var(--text-muted); }
+
+/* ── the screen: DS.Context ───────────────────────────────────────────── */
+
+.screen {
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--surface);
+}
+.screen--brand   { background: linear-gradient(var(--bg-top), var(--bg-mid) 55%, var(--bg-bot)); }
+.screen--system  { background: var(--surface-raised); }
+
+/* The scrolling middle of a screen. The last child runs to the bottom edge, so there is
+   never a dead strip under the content. */
+.screen-body {
+  flex: 1;
+  padding: var(--space-4) var(--screen-horizontal) 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--section-gap);
+  overflow: hidden;
+}
+.screen-body > :last-child { margin-bottom: 0; padding-bottom: var(--space-6); }
+
+/* ── navigation bar: DSNavigationBar ─────────────────────────────────── */
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--icon-to-text);
+  height: var(--nav-height);
+  padding: 0 var(--space-3);
+  background: transparent;
+}
+.nav .nav-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 auto;
+  padding-right: var(--space-10); /* balances the left button, so the title stays centred */
+}
+/* DSCloseButton and DSBackButton. On the LEFT, always. */
+.nav-button {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+/* ── cards: view.dsCard(...) ─────────────────────────────────────────── */
+
+.card {
+  color: var(--text-primary);
+  padding: var(--card-vertical) var(--card-horizontal);
+  background: var(--surface);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-system-card);
+}
+.card--system     { border-radius: var(--radius-system-card); }
+.card--brand      { border-radius: var(--radius-onboarding-card); }
+.card--glass      { border-radius: var(--radius-glass-card); background: var(--surface-raised); }
+.card--selected   { border-color: var(--primary); background: var(--brand-15, var(--surface-raised)); }
+.card--disabled   { opacity: var(--opacity-disabled); }
+
+.cards { display: flex; flex-direction: column; gap: var(--between-cards); }
+
+/* ── rows ─────────────────────────────────────────────────────────────── */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--icon-to-text);
+  min-height: var(--row-height);
+  padding: var(--space-2) 0;
+}
+.row .row-text { flex: 1; min-width: 0; }
+.row .row-title { font-size: 17px; font-weight: 400; }
+.row .row-value { color: var(--text-secondary); font-size: 15px; }
+.row + .row { border-top: var(--hairline) solid var(--border); }
+
+/* ── buttons: DS.Buttons ─────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--icon-to-text);
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-5);
+  border: 0;
+  border-radius: var(--radius-onboarding-card);
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn--primary   { background: var(--primary); color: var(--on-primary); }
+.btn--secondary { background: transparent; color: var(--primary); border: var(--hairline) solid var(--primary); }
+.btn--plain     { background: transparent; color: var(--primary); height: auto; width: auto; padding: var(--space-2); }
+.btn--danger    { background: var(--danger-5); color: var(--neutral-13); }
+.btn[disabled]  { opacity: var(--opacity-disabled); pointer-events: none; }
+
+/* The CTA strip at the foot of a screen. It sits ON the bottom edge. */
+.bottom-panel {
+  padding: var(--content-to-button) var(--panel-horizontal) var(--space-6);
+  background: var(--surface);
+  border-top: var(--hairline) solid var(--border);
+}
+
+/* ── fields: AppTextField ────────────────────────────────────────────── */
+
+.field { display: flex; flex-direction: column; gap: var(--space-2); }
+.field-label { font-size: 13px; color: var(--text-secondary); }
+.field-box {
+  display: flex;
+  align-items: center;
+  gap: var(--icon-to-text);
+  height: var(--control-height);
+  padding: 0 var(--card-horizontal);
+  background: var(--surface);
+  border: var(--hairline) solid var(--border);
+  border-radius: var(--radius-onboarding-card);
+}
+.field-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 17px;
+  color: inherit;
+}
+.field-box input::placeholder { color: var(--text-muted); }
+.field-box--focus { border-color: var(--primary); }
+.field-box--error { border-color: var(--danger-5); }
+.field-error { font-size: 13px; color: var(--danger-5); }
+
+/* ── small parts ──────────────────────────────────────────────────────── */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 32px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--surface-raised);
+  border: var(--hairline) solid var(--border);
+  font-size: 13px;
+}
+.chip--on { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.icon-badge {
+  width: var(--icon-badge);
+  height: var(--icon-badge);
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-icon-badge);
+  background: var(--brand-18, var(--surface-raised));
+  color: var(--primary);
+  font-size: 17px;
+}
+
+.section { display: flex; flex-direction: column; gap: var(--space-3); }
+.section-header { display: flex; align-items: baseline; gap: var(--space-3); }
+.section-header .more { margin-left: auto; color: var(--primary); font-size: 15px; }
+
+.title-block { display: flex; flex-direction: column; gap: var(--title-to-subtitle); }
+.title-block + * { margin-top: var(--subtitle-to-content); }
+
+.divider { height: var(--hairline); background: var(--border); border: 0; margin: 0; }
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+/* ── tab bar ──────────────────────────────────────────────────────────── */
+
+.tab-bar {
+  display: flex;
+  height: var(--tab-height);
+  padding-bottom: var(--space-2);
+  background: var(--surface);
+  border-top: var(--hairline) solid var(--border);
+}
+.tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.tab--on { color: var(--primary); }
+
+/* ── sheet: DSSheetScaffold ──────────────────────────────────────────── */
+
+.sheet {
+  margin-top: auto;
+  padding: var(--space-3) var(--panel-horizontal) var(--space-6);
+  background: var(--surface);
+  border-radius: var(--radius-bottom-sheet) var(--radius-bottom-sheet) 0 0;
+}
+.sheet-grabber {
+  width: 36px;
+  height: 5px;
+  margin: 0 auto var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--border);
+}
+
+/* ── shimmer: AppShimmer ─────────────────────────────────────────────── */
+
+.shimmer {
+  border-radius: var(--radius-md);
+  background: linear-gradient(90deg,
+    var(--brand-16, var(--surface-raised)) 0%,
+    var(--brand-17, var(--border)) 50%,
+    var(--brand-16, var(--surface-raised)) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s linear infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer { animation: none; }
+}
