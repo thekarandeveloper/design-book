@@ -1135,6 +1135,11 @@ html, body, #root { height: 100%; margin: 0; }
 .st-floater:hover { border-color: var(--st-edge); }
 .st-floater.is-on { background: var(--st-accent); border-color: var(--st-accent); color: #fff; }
 
+/* A row of small things in the panel: what can be done to this frame, where the frame
+   you are working on already has your attention. */
+.st-row--wrap { flex-wrap: wrap; gap: 6px; }
+.st-btn--small { flex: 1 1 auto; padding: 5px 8px; font-size: 11px; }
+
 /* Looking for a frame, beside the drawer of components. */
 .st-search {
   position: relative;

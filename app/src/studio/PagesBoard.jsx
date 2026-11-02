@@ -22,11 +22,10 @@ const HEADER = 112;  // under a section's line, before its frames start
 const PAD = 240;     // under the frames, where the next section's name sits
 const BETWEEN = 0;   // nothing: one section ends where the next one begins
 
-// How long a frame that fits its content is left alone after it has been measured, even
-// when the project keeps changing. A save hot-reloads a page and touches several files,
-// and measuring is a real page load that moves every frame under it, so once is enough
-// for a spell of work rather than once per file.
-const SETTLE = 30000;
+// A frame is left alone for this long after it has been measured, even if its own file
+// is saved again: a spell of work on a page is many saves, and measuring is a real page
+// load that moves every frame under it.
+const SETTLE = 20000;
 
 // Whether a measurement is different enough from the height the frame already has to be
 // worth writing down.
@@ -183,10 +182,14 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
   // and even then not for another half minute, so a page being worked on is re-measured
   // once for the spell of work rather than once per file the dev server touches.
   const measured = useRef(new Map());
-  const due = id => {
-    const at = measured.current.get(id);
-    if (!at) return true;                       // never measured: it has no height yet
-    return heard.current > at && Date.now() - at > SETTLE;
+  const due = page => {
+    const last = measured.current.get(page.id);
+    if (!last) return true;                       // never measured: it has no height yet
+    // Its own file changed since, and a moment has passed. Nothing else counts: a page
+    // that animates measures a little differently every time, and measuring it because
+    // some other file was saved is how a board starts shuffling on its own.
+    if (!page.changed || page.changed <= last.file) return false;
+    return Date.now() - last.at > SETTLE;
   };
   const [near, setNear] = useState(() => new Set());
   const sawNear = useCallback(id => {
@@ -196,9 +199,9 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
   useEffect(() => {
     if (measuring) return;
     const next = (studio?.pages || [])
-      .find(p => p.url && !p.sized && near.has(p.id) && due(p.id));
+      .find(p => p.url && !p.sized && near.has(p.id) && due(p));
     if (!next) return;
-    measured.current.set(next.id, Date.now());
+    measured.current.set(next.id, { at: Date.now(), file: next.changed || 0 });
     const e = edits[next.id] || {};
     // A frame set to fit keeps fitting; one being measured for the first time is not
     // being set to anything, it just has no height yet.

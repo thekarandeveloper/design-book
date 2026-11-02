@@ -259,7 +259,12 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
     // another editor, in a message to somebody else.
     for (const page of out) {
       const rel = page.sourceFile || page.file;
-      if (rel) page.path = path.resolve(studioRoot, rel);
+      if (!rel) continue;
+      page.path = path.resolve(studioRoot, rel);
+      // When the file behind this frame last changed. A frame that measures itself does
+      // it when its own page changed, not whenever anything on the board did: a board
+      // where every tall frame re-measures on a timer is a board that shuffles under you.
+      try { page.changed = Math.round(fs.statSync(page.path).mtimeMs); } catch (_) {}
     }
 
     const positions = readBoard().frames;

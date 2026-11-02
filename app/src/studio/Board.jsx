@@ -660,6 +660,7 @@ export function Board({
           frame={frame}
           onResize={(w, h) => onResize(frame.id, w, h, true, false)}
           onFit={onFit ? () => onFit(frame) : null}
+          onReload={onReload ? () => onReload(frame.id) : null}
           onCheck={onCheck ? () => onCheck(frame.id) : null}
           onCopy={onCopy}
           onDelete={frame.canDelete && onDelete ? () => onDelete(frame.id) : null}
@@ -775,7 +776,7 @@ function Menu({ at, onClose, onReload, onCheck, onFit, onRename, onDelete }) {
   );
 }
 
-function Inspector({ frame, onResize, onFit, onCheck, onCopy, onDelete, onClose }) {
+function Inspector({ frame, onResize, onFit, onReload, onCheck, onCopy, onDelete, onClose }) {
   const sizes = FRAME_GROUPS.flatMap(([group, grow, list]) =>
     list.map(([label, w, h]) => ({ group, label, w, h })));
   const match = sizes.find(s => s.w === frame.width && s.h === frame.height);
@@ -841,6 +842,19 @@ function Inspector({ frame, onResize, onFit, onCheck, onCopy, onDelete, onClose 
           <label>H<input type="number" value={h} onChange={e => setH(e.target.value)} onBlur={commit} /></label>
         </div>
       ) : null}
+
+      <div className="st-row st-row--wrap">
+        {(frame.actions || []).map(action => (
+          <button key={action.label} className="st-btn st-btn--small" title={action.title} onClick={action.onClick}>
+            {action.label}
+          </button>
+        ))}
+        {onReload ? (
+          <button className="st-btn st-btn--small" title="Load this page again" onClick={onReload}>
+            Reload
+          </button>
+        ) : null}
+      </div>
 
       {onCheck ? (
         <button className="st-btn" onClick={onCheck} title="Look it over: the words, the claims, what cannot be read">
