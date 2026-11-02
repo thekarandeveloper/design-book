@@ -1098,6 +1098,53 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
             });
           }
 
+          // Looking for something across the whole board.
+          //
+          // The name of a frame first, because that is what somebody remembers. Then
+          // what is written inside one: the file behind each frame is read and the
+          // matching lines come back with it, so a word from a headline finds the screen
+          // it is on. Reading is capped on every side, because this runs on every
+          // keystroke.
+          if (route === '/find') {
+            const asked = String(q.get('q') || '').trim();
+            if (asked.length < 2) return send({ titles: [], inside: [] });
+            const needle = asked.toLowerCase();
+            const pages = listPages();
+
+            const titles = pages
+              .filter(page => String(page.title || '').toLowerCase().includes(needle))
+              .slice(0, 12)
+              .map(page => ({ id: page.id, title: page.title, where: page.sourceFile || page.file || '' }));
+
+            const named = new Set(titles.map(t => t.id));
+            const inside = [];
+            let read = 0;
+            for (const page of pages) {
+              if (inside.length >= 12 || read >= 200) break;
+              const rel = page.sourceFile || page.file;
+              if (!rel) continue;
+              const file = path.resolve(studioRoot, rel);
+              let text = '';
+              try {
+                if (fs.statSync(file).size > 300000) continue;
+                text = fs.readFileSync(file, 'utf8');
+              } catch (_) { continue; }
+              read++;
+              if (!text.toLowerCase().includes(needle)) continue;
+
+              const hits = [];
+              const lines = text.split('\n');
+              for (let i = 0; i < lines.length && hits.length < 3; i++) {
+                if (!lines[i].toLowerCase().includes(needle)) continue;
+                hits.push({ line: i + 1, text: lines[i].trim().slice(0, 120) });
+              }
+              if (hits.length) {
+                inside.push({ id: page.id, title: page.title, where: rel, named: named.has(page.id), hits });
+              }
+            }
+            return send({ titles, inside });
+          }
+
           // How tall a frame's page really is, drawn and measured in a real browser.
           // A page of the board's own is at this server's address; a page of the
           // project's is at its dev server's.

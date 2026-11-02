@@ -140,6 +140,14 @@ An update is another file, installed over the old one. From the Marketplace it i
 automatic instead, which is the whole reason to publish it:
 `00-Shared/03-Tools/runbooks/vscode-marketplace.md`.
 
+## Finding something
+
+A box in the bar, beside the drawer of components. The names of frames come first,
+because that is what anybody remembers; under them, what is written inside the frames,
+found by reading the file behind each one. Pressing a result takes the board to that
+frame and fits it in the window. Typing waits for a pause rather than asking on every
+letter, and a frame found by its name is not listed twice.
+
 ## The tab
 
 One floating bar over the work: Screens, Design system, Moodboard, then `+` for a new

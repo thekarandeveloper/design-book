@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useHash, parseRoute, go } from './useHash.js';
-import { getStudio, newFrame, onStudioChanged, runSetup, onSetupStep } from './api.js';
+import { find, getStudio, newFrame, onStudioChanged, runSetup, onSetupStep } from './api.js';
 import { FRAME_GROUPS } from './frames.js';
 import { PagesBoard } from './PagesBoard.jsx';
 import { Moodboard } from './Moodboard.jsx';
@@ -116,6 +116,8 @@ export function App() {
             ))}
           </nav>
         )}
+
+        <Search onPick={id => { go('/pages'); setFocus(id); }} />
 
         <button
           className={'st-icon' + (route.view === 'components' ? ' is-on' : '')}
@@ -303,6 +305,119 @@ function PlusIcon() {
     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
          strokeWidth="1.8" strokeLinecap="round">
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+// Looking for a frame.
+//
+// The name first, because that is what anybody remembers. What is written inside the
+// frames after it, under its own heading, because a word from a headline is often all
+// you have. Pressing a result takes the board to that frame and fits it in the window.
+function Search({ onPick }) {
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState(null);
+  const [at, setAt] = useState(0);        // which result the keyboard is on
+  const box = useRef(null);
+  const asked = useRef(0);
+
+  // One ask per pause, not one per letter: a board of eighty frames is eighty files.
+  useEffect(() => {
+    const word = q.trim();
+    if (word.length < 2) { setFound(null); return; }
+    const mine = ++asked.current;
+    const id = setTimeout(() => {
+      find(word)
+        .then(answer => { if (mine === asked.current) { setFound(answer); setAt(0); } })
+        .catch(() => { if (mine === asked.current) setFound(null); });
+    }, 140);
+    return () => clearTimeout(id);
+  }, [q]);
+
+  useEffect(() => {
+    const away = ev => { if (box.current && !box.current.contains(ev.target)) setFound(null); };
+    window.addEventListener('pointerdown', away, true);
+    return () => window.removeEventListener('pointerdown', away, true);
+  }, []);
+
+  const rows = [
+    ...((found && found.titles) || []).map(t => ({ kind: 'name', id: t.id, title: t.title, note: t.where })),
+    // A frame already found by its name is not listed again for what is inside it.
+    ...((found && found.inside) || []).filter(i => !i.named).map(i => ({
+      kind: 'inside', id: i.id, title: i.title, note: i.hits[0] ? i.hits[0].text : i.where, hits: i.hits.length
+    }))
+  ];
+
+  const pick = row => {
+    if (!row) return;
+    setFound(null);
+    setQ('');
+    onPick(row.id);
+  };
+
+  const onKey = ev => {
+    if (ev.key === 'Escape') { setFound(null); ev.currentTarget.blur(); return; }
+    if (!rows.length) return;
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); setAt(n => Math.min(rows.length - 1, n + 1)); }
+    if (ev.key === 'ArrowUp') { ev.preventDefault(); setAt(n => Math.max(0, n - 1)); }
+    if (ev.key === 'Enter') { ev.preventDefault(); pick(rows[at]); }
+  };
+
+  const names = rows.filter(r => r.kind === 'name');
+  const inside = rows.filter(r => r.kind === 'inside');
+  const line = row => rows.indexOf(row);
+
+  return (
+    <div className="st-search" ref={box}>
+      <SearchIcon />
+      <input
+        className="st-search-box"
+        placeholder="Find a frame"
+        value={q}
+        onChange={e => setQ(e.target.value)}
+        onKeyDown={onKey}
+        onFocus={() => { if (q.trim().length > 1 && !found) setQ(q); }}
+      />
+      {q.trim().length > 1 && found ? (
+        <div className="st-search-found">
+          {!rows.length ? <p className="st-search-none">Nothing by that name, and nothing says it.</p> : null}
+
+          {names.length ? <p className="st-search-what">Frames</p> : null}
+          {names.map(row => (
+            <button
+              key={'name:' + row.id}
+              className={'st-search-row' + (line(row) === at ? ' is-at' : '')}
+              onMouseEnter={() => setAt(line(row))}
+              onClick={() => pick(row)}
+            >
+              <b>{row.title}</b>
+              <span>{row.note}</span>
+            </button>
+          ))}
+
+          {inside.length ? <p className="st-search-what">Inside frames</p> : null}
+          {inside.map(row => (
+            <button
+              key={'inside:' + row.id}
+              className={'st-search-row' + (line(row) === at ? ' is-at' : '')}
+              onMouseEnter={() => setAt(line(row))}
+              onClick={() => pick(row)}
+            >
+              <b>{row.title}</b>
+              <span>{row.note}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg className="st-search-icon" width="13" height="13" viewBox="0 0 13 13" aria-hidden="true">
+      <circle cx="5.5" cy="5.5" r="4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8.6 8.6 L12 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
     </svg>
   );
 }

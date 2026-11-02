@@ -24,6 +24,8 @@ export const newFrame = (title, width, height, { section, after, grow } = {}) =>
 // mention of it on the board moves across.
 export const renameFrame = (page, title) => send('/__api/frame/rename', 'POST', { page, title });
 // A frame made here, thrown away: the file goes to .designbook/.trash.
+// Looking for something: the names of frames first, then what is written inside them.
+export const find = q => json(`/__api/find?q=${encodeURIComponent(q)}`);
 // How tall a frame's page really is, drawn and measured in a real browser. The board
 // cannot measure a live page itself: it is another address, and a copy of it served from
 // here never finishes drawing itself.

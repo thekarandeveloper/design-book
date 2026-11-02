@@ -1131,6 +1131,85 @@ html, body, #root { height: 100%; margin: 0; }
 .st-floater:hover { border-color: var(--st-edge); }
 .st-floater.is-on { background: var(--st-accent); border-color: var(--st-accent); color: #fff; }
 
+/* Looking for a frame, beside the drawer of components. */
+.st-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--st-line);
+  border-radius: 6px;
+  background: var(--st-raise);
+  color: var(--st-muted);
+}
+.st-search:focus-within { border-color: var(--st-edge); color: var(--st-ink); }
+.st-search-icon { flex: none; }
+.st-search-box {
+  width: 128px;
+  border: 0;
+  background: transparent;
+  color: var(--st-ink);
+  font: 12px/1 -apple-system, system-ui, sans-serif;
+  outline: 0;
+}
+.st-search-box::placeholder { color: var(--st-muted); }
+.st-search:focus-within .st-search-box { width: 200px; }
+
+/* What was found, under the box. */
+.st-search-found {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  width: 320px;
+  max-height: 60vh;
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--st-line);
+  border-radius: 8px;
+  background: var(--st-veil);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 40px var(--st-shade);
+  z-index: 60;
+}
+.st-search-what {
+  margin: 6px 8px 4px;
+  color: var(--st-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.st-search-none { margin: 8px; color: var(--st-muted); font-size: 12px; }
+.st-search-row {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.st-search-row.is-at { background: var(--st-hover); }
+.st-search-row b {
+  display: block;
+  color: var(--st-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+.st-search-row span {
+  display: block;
+  margin-top: 1px;
+  color: var(--st-muted);
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* What you can do to a frame, under the right button. Quiet, small, and in the place
    the pointer already is. Its own name, because the bar's picker is called `st-menu`
    and anchors itself to the right of whatever it sits in. */

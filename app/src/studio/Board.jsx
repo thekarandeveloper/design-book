@@ -215,12 +215,12 @@ export function Board({
       (rect.width - pad * 2) / Math.max(1, box.maxX - box.minX),
       (rect.height - pad * 2) / Math.max(1, box.maxY - box.minY)
     )));
-    setView({
+    move({
       k,
       x: pad - box.minX * k + (rect.width - pad * 2 - (box.maxX - box.minX) * k) / 2,
       y: pad - box.minY * k
     });
-  }, [frames]);
+  }, [frames, move]);
 
   // Bring one frame into the middle of the window, at a zoom it fits in. A frame that
   // has just been made is no use at the far right of a line nobody has scrolled to.
@@ -233,7 +233,7 @@ export function Board({
       (rect.width - pad * 2) / Math.max(1, f.width),
       (rect.height - pad * 2) / Math.max(1, f.height)
     );
-    setView(v => {
+    move(v => {
       const k = Math.min(MAX, Math.max(MIN, Math.min(v.k, fit)));
       return {
         k,
@@ -241,7 +241,7 @@ export function Board({
         y: rect.height / 2 - (f.y + f.height / 2) * k
       };
     });
-  }, [frames]);
+  }, [frames, move]);
 
   // A frame the board is asked to show: selected, and brought into the middle.
   const asked = useRef('');
