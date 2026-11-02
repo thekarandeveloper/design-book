@@ -777,6 +777,9 @@ function Menu({ at, onClose, onReload, onCheck, onFit, onRename, onDelete }) {
       className="st-context"
       style={{ left: place.left, top: place.top }}
       onContextMenu={ev => ev.preventDefault()}
+      // The menu sits inside the board, whose own press handler closes it. Without this a
+      // real press shut the menu before its click could land on the item.
+      onPointerDown={ev => ev.stopPropagation()}
     >
       <p className="st-context-what">{frame.title}</p>
       {items.map(item => (
