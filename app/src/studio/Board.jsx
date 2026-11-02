@@ -292,24 +292,41 @@ export function Board({
       }
       wheelBeat.ask();
     };
-    // Taken in the capture phase, before anything else in the page, and refused loudly
-    // so the editor around it does not put its own menu over the board.
-    const onMenu = ev => {
-      const node = ev.target.closest && ev.target.closest('.st-frame');
-      if (!node) return;
-      const id = node.getAttribute('data-id');
-      const f = frames.find(frame => frame.id === id);
+    // The right button, caught twice.
+    //
+    // Inside an editor's panel the board is a page inside a page, and the editor can take
+    // the contextmenu event before this ever sees it. The press of the right button comes
+    // first and reaches the page either way, so that is what opens the menu; the
+    // contextmenu event, if it arrives at all, only refuses the editor's own menu.
+    const frameUnder = target => {
+      const node = target && target.closest && target.closest('.st-frame');
+      if (!node) return null;
+      return frames.find(frame => frame.id === node.getAttribute('data-id')) || null;
+    };
+
+    const onRightDown = ev => {
+      if (ev.button !== 2) return;
+      const f = frameUnder(ev.target);
       if (!f) return;
       ev.preventDefault();
       ev.stopPropagation();
       select(f.id);
       setMenu({ frame: f, x: ev.clientX, y: ev.clientY });
     };
+    const onMenu = ev => {
+      if (!frameUnder(ev.target)) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+    };
+    el.addEventListener('pointerdown', onRightDown, true);
+    el.addEventListener('mousedown', onRightDown, true);
     el.addEventListener('contextmenu', onMenu, true);
 
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       wheelBeat.stop();
+      el.removeEventListener('pointerdown', onRightDown, true);
+      el.removeEventListener('mousedown', onRightDown, true);
       el.removeEventListener('contextmenu', onMenu, true);
       el.removeEventListener('wheel', onWheel);
     };
@@ -339,9 +356,9 @@ export function Board({
   }, [fit, selected, inside, onDelete, move]);
 
   const startPan = ev => {
+    if (ev.button !== 0 && ev.button !== 1) return;
     setMenu(null);
     setInside('');
-    if (ev.button !== 0 && ev.button !== 1) return;
     if (ev.target.closest('.st-frame-bar, .st-handle, .st-inspector, .st-band-bar')) return;
     // Selecting a frame is selecting a frame, and nothing else.
     //

@@ -82,8 +82,11 @@ the editor and a board cannot rely on it. What they offer:
 copy its name, export it, load the page again, fit the content, check it, rename it,
 throw it away.
 
-The `...` shows itself when the name is hovered or the frame is chosen, and the panel
-carries the same row, so nothing lives only in a menu.
+The menu opens on the **press** of the right button rather than on the contextmenu event
+that usually follows it, because inside an editor's panel the board is a page inside a
+page and the editor can take that event before the board ever sees it. The press arrives
+either way. The `...` shows itself when the name is hovered or the frame is chosen, and
+the panel carries the same row, so nothing lives only in a menu.
 
 Because of that, a frame carries nothing but its name. A row of buttons over every frame
 is a row you read past, and the board is for looking at the work.
