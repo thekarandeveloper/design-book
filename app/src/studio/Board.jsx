@@ -211,6 +211,9 @@ export function Board({
 
     const rect = boardRef.current.getBoundingClientRect();
     const pad = 56;
+    // Everything on the board, however far out that is. A board with one very tall
+    // screen on it fits at a few percent, and that is the right answer: it is the whole
+    // board, which is what fitting means.
     const k = Math.min(MAX, Math.max(MIN, Math.min(
       (rect.width - pad * 2) / Math.max(1, box.maxX - box.minX),
       (rect.height - pad * 2) / Math.max(1, box.maxY - box.minY)
@@ -228,18 +231,19 @@ export function Board({
     const f = frames.find(x => x.id === id);
     if (!f || !boardRef.current) return;
     const rect = boardRef.current.getBoundingClientRect();
-    const pad = 80;
-    const fit = Math.min(
-      (rect.width - pad * 2) / Math.max(1, f.width),
-      (rect.height - pad * 2) / Math.max(1, f.height)
-    );
-    move(v => {
-      const k = Math.min(MAX, Math.max(MIN, Math.min(v.k, fit)));
-      return {
-        k,
-        x: rect.width / 2 - (f.x + f.width / 2) * k,
-        y: rect.height / 2 - (f.y + f.height / 2) * k
-      };
+    const pad = 64;
+    // By its width rather than its whole height. A screen showing its full content can be
+    // forty thousand pixels tall, and fitting that would draw it as a hairline: across is
+    // what tells you which screen this is, and down is what scrolling is for.
+    // Never past life size: a small frame blown up to fill the window is not a truer
+    // view of it, it is a bigger one.
+    const k = Math.min(1, Math.max(MIN, (rect.width - pad * 2) / Math.max(1, f.width)));
+    const fits = f.height * k < rect.height - pad * 2;
+    move({
+      k,
+      x: rect.width / 2 - (f.x + f.width / 2) * k,
+      // In the middle when the whole of it fits, at its own top when it does not.
+      y: fits ? rect.height / 2 - (f.y + f.height / 2) * k : pad - f.y * k
     });
   }, [frames, move]);
 
@@ -466,7 +470,7 @@ export function Board({
               width: f.width,
               transform: isDragging ? `translate(${drag.dx}px, ${drag.dy}px)` : undefined
             }}
-            onPointerDown={() => select(f.id)}
+            onPointerDown={() => { select(f.id); centreOn(f.id); }}
             onDoubleClick={() => setInside(f.id)}
             onContextMenu={ev => {
               ev.preventDefault();
@@ -487,7 +491,7 @@ export function Board({
         );
       })}
     </>
-  ), [frames, bands, drag, selected, inside, select, startResize]);
+  ), [frames, bands, drag, selected, inside, select, centreOn, startResize]);
 
   return (
     <div

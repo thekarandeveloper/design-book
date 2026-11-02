@@ -501,6 +501,10 @@ html, body, #root { height: 100%; margin: 0; }
   background: repeating-linear-gradient(135deg, var(--st-sunk) 0 10px, var(--st-raise) 10px 20px);
   opacity: 0.5;
 }
+/* Whatever is inside it, a frame is a rectangle you can see from across the board. Far
+   out, where a waiting card is too small to read, this is the only thing that says a
+   frame is there at all. */
+.st-screen { background: var(--st-panel); }
 
 /* ── inspector ───────────────────────────────────────────────────────── */
 

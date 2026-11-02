@@ -350,8 +350,9 @@ function Search({ onPick }) {
 
   const rows = [
     ...((found && found.titles) || []).map(t => ({ kind: 'name', id: t.id, title: t.title, note: t.where })),
-    // A frame already found by its name is not listed again for what is inside it.
-    ...((found && found.inside) || []).filter(i => !i.named).map(i => ({
+    // A frame found by its name is listed under what is inside it as well: the two are
+    // different answers to the same question, and the line that matched is worth seeing.
+    ...((found && found.inside) || []).map(i => ({
       kind: 'inside', id: i.id, title: i.title, note: i.hits[0] ? i.hits[0].text : i.where, hits: i.hits.length
     }))
   ];
