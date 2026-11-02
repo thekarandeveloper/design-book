@@ -192,6 +192,12 @@ compiled by the board's own server and mounted in the frame, from where the file
 saving one redraws it. Anything that can only be drawn by a compiler nobody here has is
 left out, with the reason on the board rather than a frame full of guesswork.
 
+A frame never grows a scrollbar. The route written into a Next project takes the bar
+away for good, because a page that hides the bar and gives it back, which anything with
+a preloader or a scroll lock does, changes the width every time it does, and a width
+that changes changes the height, and the frame jumps. A frame showing its full content
+also refuses to scroll at all, and is measured a few pixels over rather than under.
+
 A screen drawn by the board is drawn in the project's own design: the stylesheets the
 project puts behind every one of its screens, found where it says so in its entry file,
 are imported through the same compiler the screen is, so a css module, an `@import` and

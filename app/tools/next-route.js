@@ -61,6 +61,18 @@ export function writeNextRoute(cwd, screens) {
 // Delete this folder to turn it off; the board writes it again when it next scans.
 import { notFound } from 'next/navigation';
 
+// No scrollbar in a frame, ever.
+//
+// A frame is as tall as its page, so there is nothing to scroll; but a page that takes
+// the scrollbar away and gives it back, which anything with a preloader or a lock does,
+// makes the frame jump every time it does. The bar is taken away here for good, and the
+// page keeps its own scrolling.
+const NO_BARS = [
+  'html { scrollbar-width: none !important; }',
+  'html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0 !important; height: 0 !important; }',
+  'body { overflow-x: hidden !important; }'
+].join('\\n');
+
 const screens: Record<string, () => Promise<any>> = {
 ${lines.join('\n')}
 };
@@ -73,7 +85,12 @@ export default async function DesignBookScreen({ params }: any) {
   const mod: any = await load();
   const Screen: any = mod?.default || Object.values(mod || {}).find((v: any) => typeof v === 'function');
   if (!Screen) notFound();
-  return <Screen />;
+  return (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: NO_BARS }} />
+      <Screen />
+    </>
+  );
 }
 `;
 

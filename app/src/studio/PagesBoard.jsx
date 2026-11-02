@@ -227,7 +227,9 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
     measurePage(measuring.url, measuring.width, measuring.viewport)
       .then(answer => {
         if (!alive || !answer || !answer.height) return;
-        const height = Math.ceil(answer.height) + 2;
+        // A little over, never a little under: a frame a pixel short of its page grows a
+        // scrollbar, and a scrollbar changes the width, and the width changes the height.
+        const height = Math.ceil(answer.height) + 8;
         // All but the same height as last time is nothing to write down: the frame is
         // already that tall to look at, and writing it would move every frame under it
         // for nothing.
@@ -592,6 +594,10 @@ function Frame({ page, width, height, working, scanning, keepAwake, reload, onNe
             src={page.url}
             title={page.title}
             loading="lazy"
+            // A frame showing its full content is as tall as its page, so there is
+            // nothing to scroll, and a scrollbar that comes and goes is a frame that
+            // jumps. One that is not has its own scrolling, once you are inside it.
+            scrolling={page.fit ? 'no' : undefined}
             onLoad={() => setDrawn(true)}
           />
         : null}
