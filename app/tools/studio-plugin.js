@@ -1334,6 +1334,68 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
             }
           }
 
+          // Moving a frame: into another section, or to another place in the one it is in.
+          //
+          // One call, rather than reading every section, editing the list and putting the
+          // whole thing back. That round trip is the expensive part when an agent is the
+          // one moving frames, and the list it would have to carry grows with the board.
+          if (route === '/frame/move' && req.method === 'POST') {
+            const { page, section, after, to } = await body();
+            const pages = listPages();
+            if (!pages.some(p => p.id === page)) return send({ error: 'no such frame' }, 404);
+            if (section === undefined && after === undefined && to === undefined) {
+              return send({ error: 'say where: a section, a frame to land after, or a place' }, 400);
+            }
+
+            const bands = listSections(pages)
+              .map(({ id, name, frames, saved }) => ({ id, name, saved, frames: [...frames] }));
+            const from = bands.find(b => b.frames.includes(page));
+
+            const asked = section === undefined || section === null || section === '' ? null : String(section);
+            let into = asked === null
+              ? from
+              : bands.find(b => b.id === asked)
+                || bands.find(b => b.name.toLowerCase() === asked.toLowerCase());
+            if (asked !== null && !into) {
+              // A section nobody has made yet is made here, rather than the move failing
+              // and asking for a second call to make it first.
+              let id = slug(asked) || 'section';
+              while (bands.some(b => b.id === id)) id += '-2';
+              into = { id, name: asked.slice(0, 60), saved: true, frames: [] };
+              bands.push(into);
+            }
+            if (!into) return send({ error: 'no such section' }, 404);
+
+            if (from) from.frames = from.frames.filter(f => f !== page);
+            into.frames = into.frames.filter(f => f !== page);
+
+            // Where it lands: behind a named frame, at a place counted from the left, or
+            // at the end, which is where something moved without a place belongs.
+            let index = into.frames.length;
+            if (after !== undefined && after !== null) {
+              if (after === '' || after === 'start') index = 0;
+              else {
+                const at = into.frames.indexOf(String(after));
+                index = at < 0 ? into.frames.length : at + 1;
+              }
+            } else if (to === 'start') {
+              index = 0;
+            } else if (to !== undefined && to !== null && to !== 'end') {
+              const n = Number(to);
+              if (Number.isFinite(n)) index = Math.max(0, Math.min(into.frames.length, Math.round(n)));
+            }
+            into.frames.splice(index, 0, page);
+
+            const doc = readBoard();
+            // A section somebody made stays even when the last frame leaves it; one that
+            // was never asked for goes with its frames.
+            doc.sections = bands
+              .filter(b => b.frames.length || b.saved)
+              .map(({ id, name, frames }) => ({ id, name, frames }));
+            writeBoard(doc);
+            return send({ ok: true, section: into.id, index, sections: listSections(pages) });
+          }
+
           if (route === '/frame/rename' && req.method === 'POST') {
             const { page, title } = await body();
             const done = renameFrame(page, title);

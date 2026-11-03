@@ -244,11 +244,19 @@ curl -s $B/palette                      # the colours, fonts and spacing it real
 curl -s -X POST $B/frame/new    -H 'Content-Type: application/json' -d '{"title":"Story","width":1080,"height":1920}'
 curl -s -X POST $B/frame/rename -H 'Content-Type: application/json' -d '{"page":"pages/03-story.astro","title":"Story, wide"}'
 curl -s -X POST $B/frame/delete -H 'Content-Type: application/json' -d '{"page":"pages/03-story.astro"}'
+curl -s -X POST $B/frame/move   -H 'Content-Type: application/json' -d '{"page":"exp:03-story","section":"Ideas"}'
 curl -s -X POST $B/check        -H 'Content-Type: application/json' -d '{"page":"exp:03-story"}'
 curl -s -X POST $B/measure      -H 'Content-Type: application/json' -d '{"url":"/@studio/pages/03-story.html","width":1080}'
 curl -s -X POST $B/export       -H 'Content-Type: application/json' -d '{"page":"exp:03-story","format":"png","scale":2}'
 curl -s -X POST $B/setup        -H 'Content-Type: application/json' -d '{}'
 ```
+
+`frame/move` puts one frame somewhere else, in a single call: `section` is the section it
+goes to, by id or by name, and a name nobody has used yet makes that section. Where it
+lands inside the section is `after`, the frame it should sit behind, or `to`, a place
+counted from the left, or `"start"` or `"end"`. Leave `section` out to reorder a frame
+where it already is. Nothing else needs to be sent, and the answer carries every section
+back, so there is no reading the board first and no writing the whole list back.
 
 No `.port` file, or nothing answering on it, means no board is open on that repo: then
 the files below are the way, and everything still works.

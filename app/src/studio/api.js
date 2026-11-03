@@ -39,6 +39,9 @@ export const putPositions = frames => send('/__api/positions', 'PUT', { frames }
 // The sections of the board, in order, each with the frames it holds in order.
 export const getSections = () => json('/__api/sections').then(r => r.sections);
 export const putSections = sections => send('/__api/sections', 'PUT', { sections });
+// One frame to another section, or to another place in its own. `after` is a frame to
+// land behind, `to` a place counted from the left, or 'start' or 'end'.
+export const moveFrame = (page, where) => send('/__api/frame/move', 'POST', { page, ...where });
 export const getBoard = () => json('/__api/board');
 export const putBoard = patch => send('/__api/board', 'PUT', patch);
 export const getRefs = () => json('/__api/refs').then(r => r.refs);
