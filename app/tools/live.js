@@ -50,7 +50,11 @@ export class LiveSource {
       // The same widened PATH, so `npm run dev` works however the editor was launched.
       const extra = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
       const PATH = [...new Set([...(process.env.PATH || '').split(':').filter(Boolean), ...extra])].join(':');
-      const proc = spawn(this.command, { cwd: this.cwd, shell: true, env: { ...process.env, PATH } });
+      // The board itself runs as node inside the editor's binary, and that is ours alone:
+      // the project's dev server is started as a plain command and never told it.
+      const env = { ...process.env, PATH };
+      delete env.ELECTRON_RUN_AS_NODE;
+      const proc = spawn(this.command, { cwd: this.cwd, shell: true, env });
       this.proc = proc;
 
       let settled = false;

@@ -32,28 +32,39 @@ function widePath() {
   return merged.join(':');
 }
 
-let cachedNode = '';
-function findNode() {
-  if (cachedNode) return cachedNode;
+// Node is the editor's own binary, asked to run as node. There is nothing to look for:
+// a machine that is running this extension is already running node, so a PATH without it,
+// a version manager, or a Homebrew that moved cannot keep the board from starting.
+const NODE = process.execPath;
+
+function nodeEnv(extra) {
+  return { ...process.env, ELECTRON_RUN_AS_NODE: '1', PATH: widePath(), ...extra };
+}
+
+// npm, on the other hand, is a shell script, and node cannot read one. What is wanted is
+// the JS file behind it, which is where the `npm` on the PATH really points.
+let cachedNpm = '';
+function findNpm() {
+  if (cachedNpm && fs.existsSync(cachedNpm)) return cachedNpm;
   for (const dir of widePath().split(':')) {
-    const candidate = path.join(dir, 'node');
-    try {
-      fs.accessSync(candidate, fs.constants.X_OK);
-      cachedNode = candidate;
-      return candidate;
-    } catch (_) {}
+    let real = '';
+    try { real = fs.realpathSync(path.join(dir, 'npm')); } catch (_) { continue; }
+    const cli = real.endsWith('.js')
+      ? real
+      : path.join(path.dirname(real), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
+    if (fs.existsSync(cli)) { cachedNpm = cli; return cli; }
   }
-  // A login shell knows, even when this process does not.
-  try {
-    const found = require('node:child_process')
-      .execSync('/bin/zsh -lc "command -v node"', { encoding: 'utf8', timeout: 5000 })
-      .trim();
-    if (found && fs.existsSync(found)) {
-      cachedNode = found;
-      return found;
-    }
-  } catch (_) {}
   return '';
+}
+
+// A new version deletes the folder the old one ran from, and a window that was open at
+// the time still points there. Spawning in a folder that is gone fails as ENOENT naming
+// node, the one thing that is not missing, so the real reason is said instead.
+function appGone(appDir) {
+  return isDir(appDir)
+    ? ''
+    : 'Design Book was updated while this window was open. Reload the window (Cmd+Shift+P, '
+      + '"Developer: Reload Window") and open the board again.';
 }
 
 // ── the server ────────────────────────────────────────────────────────────
@@ -110,28 +121,25 @@ async function ensureServer(canvas) {
   log(`[design book] starting for ${canvas.folder}`);
 
   return new Promise(resolve => {
-    const node = findNode();
     const vite = path.join(appDir, 'node_modules', 'vite', 'bin', 'vite.js');
-    if (!node || !fs.existsSync(vite)) {
-      log(node
-        ? `[design book] vite is missing at ${vite}. Run npm install in ${appDir}.`
-        : '[design book] could not find node. Open the Design log and check the PATH.');
-      state.log && state.log.show();
+    const gone = appGone(appDir);
+    if (gone || !fs.existsSync(vite)) {
+      if (gone) vscode.window.showErrorMessage(gone);
+      log(gone || `[design book] vite is missing at ${vite}. Run npm install in ${appDir}.`);
+      if (!gone) state.log && state.log.show();
       entry.starting = false;
       servers.delete(canvas.root);
       return resolve(0);
     }
-    log(`[design book] ${node} ${vite}`);
+    log(`[design book] ${NODE} ${vite}`);
 
-    const proc = spawn(node, [vite], {
+    const proc = spawn(NODE, [vite], {
       cwd: appDir,
-      env: {
-        ...process.env,
-        PATH: widePath(),
+      env: nodeEnv({
         STUDIO_ROOT: canvas.root,
         REPO_ROOT: canvas.folder,
         STUDIO_PORT: String(5273 + servers.size - 1)
-      }
+      })
     });
     entry.proc = proc;
 
@@ -211,21 +219,25 @@ function install(appDir) {
     },
     async progress => {
       progress.report({ message: 'fetching what the board runs on' });
-      const node = findNode();
-      const npm = node ? path.join(path.dirname(node), 'npm') : '';
-      if (!node || !fs.existsSync(npm)) {
+      const gone = appGone(appDir);
+      if (gone) {
+        vscode.window.showErrorMessage(gone);
+        return false;
+      }
+      const npm = findNpm();
+      if (!npm) {
         vscode.window.showErrorMessage(
-          'Design Book needs Node to set itself up, and there is none on this machine. '
-          + 'Install it from nodejs.org, or with `brew install node`, then open the board again.'
+          'Design Book needs npm to set itself up, and there is none on this machine. '
+          + 'Install Node from nodejs.org, or with `brew install node`, then open the board again.'
         );
         return false;
       }
 
-      log(`[design book] ${npm} install in ${appDir}`);
+      log(`[design book] ${NODE} ${npm} install in ${appDir}`);
       const ok = await new Promise(resolve => {
-        const proc = spawn(node, [npm, 'install', '--no-audit', '--no-fund'], {
+        const proc = spawn(NODE, [npm, 'install', '--no-audit', '--no-fund'], {
           cwd: appDir,
-          env: { ...process.env, PATH: widePath(), npm_config_yes: 'true' }
+          env: nodeEnv({ npm_config_yes: 'true' })
         });
         let tail = '';
         const onData = chunk => {
@@ -237,7 +249,11 @@ function install(appDir) {
         };
         proc.stdout.on('data', onData);
         proc.stderr.on('data', onData);
-        proc.on('error', err => { log(`[design book] ${err.message}`); resolve(false); });
+        proc.on('error', err => {
+          log(`[design book] ${err.message}`);
+          vscode.window.showErrorMessage(appGone(appDir) || `Design Book could not run npm: ${err.message}`);
+          resolve(false);
+        });
         proc.on('exit', code => {
           if (code !== 0) log(`[design book] npm install ended with ${code}:\n${tail}`);
           resolve(code === 0);
@@ -266,4 +282,4 @@ function stopServer(root) {
 }
 function stopAll() { for (const root of [...servers.keys()]) stopServer(root); }
 
-module.exports = { widePath, findNode, request, alive, ensureServer, releaseServer, stopServer, stopAll };
+module.exports = { widePath, request, alive, ensureServer, releaseServer, stopServer, stopAll };
