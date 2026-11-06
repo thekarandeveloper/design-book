@@ -110,13 +110,48 @@ can do the job, and say so when you do.
 | The app is | Where its components are | What to do |
 |---|---|---|
 | Astro, Next, Vue, Svelte | `src/components`, `app`, `components` | Import them. A page on the board is a real page of the project. |
-| SwiftUI | `*/Views`, `*/DesignSystem`, `*/Components` | Read the real values out of the Swift and rebuild the screen in HTML with those numbers. |
-| Compose | `*/ui`, `*/designsystem`, `*/components` | The same: read the dp and the shapes, then draw in HTML. |
+| SwiftUI | `*/Views`, `*/DesignSystem`, `*/Components` | Read the real values out of the Swift and draw the screen in HTML with those numbers. It is approximate until it has been compared with the app, see below. |
+| Compose | `*/ui`, `*/designsystem`, `*/components` | The same: read the dp and the shapes, then draw in HTML. Approximate until compared. |
 
 For a web project, write the page in the project's own language so it compiles with the
 project's own dev server. For a native project the board cannot run Swift or Kotlin, so
 the page is HTML, and its value comes from using the app's **real numbers** rather than
-invented ones.
+invented ones. Real numbers make it close. They do not make it a copy.
+
+## A copy of a native screen is approximate until it has been compared
+
+Code says what a screen is made of, not what it looks like. The navigation bar, the tab bar,
+a sheet's scaffold, glass buttons, system icons and the spacing the system adds are not in
+the file you read. A screen drawn from code alone is a guess that looks tidy, and a tidy
+guess passes every check the board has, because none of them look at the app. So:
+
+1. **No reference, no "replica" and no "exact".** A reference is a simulator screenshot of
+   that exact screen, or a Figma frame of it. Without one, end the frame's title with
+   `(approx)` and say "approximate, from code", in your messages and nowhere stronger.
+2. **Get the reference first.** For a native app, build it, run it in the simulator and
+   capture each screen before drawing any (`xcrun simctl io booted screenshot <file>`). Keep
+   them in `.designbook/refs/`, named for the frame.
+3. **One screen first.** When the ask spans many screens, make one, put it beside its
+   reference and show that before doing the rest. To put them side by side: choose the frame,
+   press the up arrow until it says Page, right-click, "Add a reference", then "Copy
+   screenshot". Fix what differs, then continue, and compare each screen as you go.
+4. **Read the whole file of every screen you copy,** and the chrome it sits in: the
+   navigation bar, the tab bar, the sheet. Grepping for text and icon names is not reading.
+5. **Say the limits in the first message,** not the last: icons that had to be substituted
+   (SF Symbols do not render in a browser), data that is invented, screens you did not read.
+6. **Mark invented data** as sample, at the top of the page in a comment, so it is not taken
+   for the app's own. Use the app's fixtures where it has them.
+7. **Read the tokens again before starting,** and `git status` the token files: if they are
+   modified, the colours you remember may be out of date, so say so.
+8. **Confirm where the board belongs before the first file:** the project the app lives in,
+   not the workspace around it. Say which, and wait if it is not obvious.
+9. **Verify on the board, not in the file.** `curl -s $B/studio` lists the frame ids (a page
+   in `.designbook/pages` ends in `.html`) and `curl -s $B/board` the sections. A board file
+   with ids that do not match shows nothing. Run `POST $B/check` on every frame, not a sample.
+10. **A generator lives in the project,** under `.designbook/`, never in a scratchpad that
+    disappears. Say that the pages it writes are output, not meant to be edited by hand.
+11. **Leave checked-in instruction files alone** (`CLAUDE.md`, `AGENTS.md`) unless you were
+    asked to change them, and say so when you touched one.
 
 ## Units: pt, dp and px are the same number here
 
@@ -355,7 +390,9 @@ it.
 The board is already up, the frames have loaded what you made, and the check is clean.
 Say in one line what changed, and name anything the check found that you decided to
 leave. If you made more than one version, say in one
-line what each is trying, so there is something to choose between.
+line what each is trying, so there is something to choose between. For a copy of a native
+screen, say whether it was compared with a reference and what still differs; if it was not,
+say that it is approximate.
 
 ## Bringing a frame into the project
 

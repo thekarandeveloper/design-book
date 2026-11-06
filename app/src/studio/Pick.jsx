@@ -429,7 +429,8 @@ async function sideBySide(a, b, nameA, nameB) {
   });
   const [ia, ib] = await Promise.all([load(a), load(b)]);
   // Both at the same height, so they read as two versions of one thing.
-  const h = Math.min(Math.max(ia.height, ib.height), 700);
+  // Tall enough to compare the detail of a whole screen, which is what this is mostly for.
+  const h = Math.min(Math.max(ia.height, ib.height), 1200);
   const wa = Math.round(ia.width * (h / ia.height));
   const wb = Math.round(ib.width * (h / ib.height));
   const pad = 20;
