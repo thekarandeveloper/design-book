@@ -420,6 +420,8 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
     stamp: `${page.changed || 0}:${epoch}`,
     // Drawn by an iframe, which is what can be run, and what can be a picture instead.
     running: !!page.url,
+    // Its page is the board's own, on this origin: it can be read in place.
+    local: !!page.url && page.url.startsWith('/'),
     path: page.path || '',
     // Nothing but the name until the name is hovered. A row of buttons over every frame
     // is a row of buttons you read past, and the board is for looking at the work.

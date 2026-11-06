@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   scanFrame, elementDetail, auditElement, shotOf, shotRegion, shotStatesOf, shotSizesOf,
-  rememberLook, getRemembered, savePicture, pictureUrl, getRefs
+  rememberLook, getRemembered, savePicture, pictureUrl, getRefs, warmFrame
 } from './api.js';
 import { hit, labelOf, parentOf, childOf, onFrame, rematch, measure, promptFor, modelFor, TEMPLATES } from './pick.js';
 import { ImageDialog, AnnotateDialog, CompareDialog } from './Dialogs.jsx';
+import { windowOf, scanLocal, detailLocal, auditLocal } from './local.js';
+import { isScreenSize } from './frames.js';
 
 // Choosing things inside a frame, and getting what you chose to Claude.
 //
@@ -33,6 +35,19 @@ function scrollOf(frameId) {
   }
 }
 
+// A frame's page is opened in the headless browser ahead of being asked about, for the one
+// kind of page that needs it: a project's dev server. Reading one takes as long as the site
+// takes to draw itself (a loader, a curtain), and that wait is better spent while the pointer
+// is on its way to the frame than after it has pressed. Once a minute per frame is enough.
+const warmed = new Map();
+export function warmAhead(f) {
+  if (!f || !f.running || f.local) return;
+  const at = warmed.get(f.id) || 0;
+  if (Date.now() - at < 60000) return;
+  warmed.set(f.id, Date.now());
+  warmFrame(f.id).catch(() => {});
+}
+
 // ── the map of a frame ──────────────────────────────────────────────────────
 
 function useFrameScan(frame, on) {
@@ -40,9 +55,43 @@ function useFrameScan(frame, on) {
   const key = frame ? `${frame.id}|${frame.width}x${frame.height}|${frame.nonce}` : '';
   const stamp = frame ? frame.stamp : '';
   const read = useRef({ nonce: null, key: '' });
+  const local = !!frame && !!frame.local;
+
+  // A page of the board's own is read where it is: its window is reachable, the answer is a
+  // few milliseconds, and no browser is started. Read again when the page loads again.
+  useEffect(() => {
+    if (!on || !frame || !local) return;
+    let alive = true;
+    let timer = 0;
+    let node = null;
+    const take = () => {
+      if (!alive) return false;
+      const win = windowOf(frame.id);
+      if (!win) return false;
+      try {
+        setState({ key, status: 'ready', scan: scanLocal(win), error: '' });
+      } catch (err) {
+        setState({ key, status: 'failed', scan: null, error: String(err.message || err) });
+      }
+      return true;
+    };
+    const watch = () => {
+      const el = document.querySelector(`.st-world > .st-frame[data-id="${CSS.escape(frame.id)}"] iframe`);
+      if (el && el !== node) { node = el; el.addEventListener('load', () => { clearTimeout(timer); timer = setTimeout(take, 120); }); }
+    };
+    setState(s => (s.key === key ? s : { key, status: 'reading', scan: null, error: '' }));
+    let tries = 0;
+    const poll = () => {
+      watch();
+      if (take() || ++tries > 150) return;
+      timer = setTimeout(poll, 40);
+    };
+    timer = setTimeout(poll, 0);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [on, key, stamp, local]);
 
   useEffect(() => {
-    if (!on || !frame) return;
+    if (!on || !frame || local) return;
     let alive = true;
     // Taken again when the page changed, but not at once: a person saving files makes a
     // change a second, and each one is a page being read.
@@ -59,7 +108,7 @@ function useFrameScan(frame, on) {
       }).catch(err => { if (alive) setState({ key, status: 'failed', scan: null, error: String(err.message || err) }); });
     }, delay);
     return () => { alive = false; clearTimeout(timer); gone.abort(); };
-  }, [on, key, stamp]);
+  }, [on, key, stamp, local]);
 
   // Not a map of another frame.
   return state.key === key ? state : { key, status: on ? 'reading' : 'idle', scan: null, error: '' };
@@ -127,21 +176,54 @@ export function usePick({ frame, inside, scrolled, say, onReload, onFit }) {
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('keyup', key); };
   }, [live]);
 
-  // What is known about each chosen element, asked for when it is chosen.
+  // What is known about each chosen element, asked for when it is chosen. A page of the
+  // board's own is asked in place and answers at once; another is asked of the server.
   useEffect(() => {
     if (!frame) return;
     let alive = true;
+    const win = frame.local ? windowOf(frame.id) : null;
+    const screen = isScreenSize(frame.width, frame.height);
     for (const p of picks) {
       if (p.kind === 'region') continue;
       if (!details[p.i]) {
-        elementDetail(frame.id, p.i).then(d => { if (alive && !d.stale && !d.error) setDetails(was => ({ ...was, [p.i]: d })); });
+        if (win) {
+          const d = detailLocal(win, p.i);
+          if (d && !d.stale) setDetails(was => ({ ...was, [p.i]: d }));
+        } else {
+          elementDetail(frame.id, p.i).then(d => { if (alive && !d.stale && !d.error) setDetails(was => ({ ...was, [p.i]: d })); });
+        }
       }
       if (!issues[p.i]) {
-        auditElement(frame.id, p.i).then(a => { if (alive && a.issues) setIssues(was => ({ ...was, [p.i]: a.issues })); });
+        if (win) {
+          const a = auditLocal(win, p.i, { width: frame.width, height: frame.height, screen, touch: screen && frame.width <= 500 });
+          if (a.issues) setIssues(was => ({ ...was, [p.i]: a.issues }));
+        } else {
+          auditElement(frame.id, p.i).then(a => { if (alive && a.issues) setIssues(was => ({ ...was, [p.i]: a.issues })); });
+        }
       }
     }
     return () => { alive = false; };
   }, [picks.map(p => p.kind === 'region' ? 'r' : p.i).join(','), frameId, scanKey]);
+
+  // Where an element is, for a request to the server that did not number it: the server reads
+  // a page of the board's own separately, so it is told where to look and not which number.
+  const findOf = useCallback(i => {
+    const f = S.current.frame;
+    const d = S.current.details[i];
+    if (!f || !f.local || !d || !Array.isArray(d.path)) return undefined;
+    return { path: d.path, selector: d.selector, text: (d.text || '').slice(0, 60), tag: d.tag };
+  }, []);
+
+  // The headless browser is asked to open the page ahead of the first picture, so the
+  // first picture is not the one that pays for it.
+  useEffect(() => { if (frame && live && state.status === 'ready') warmFrame(frame.id).catch(() => {}); }, [frameId, live, state.status === 'ready']);
+
+  const findNow = i => {
+    const f = S.current.frame;
+    const d = S.current.details[i];
+    if (!f || !f.local || !d || !Array.isArray(d.path)) return undefined;
+    return { path: d.path, selector: d.selector, text: (d.text || '').slice(0, 60), tag: d.tag };
+  };
 
   // The picture that goes in the panel: the thing itself.
   const pickKey = picks.map(p => p.kind === 'region' ? `r${p.rect.x},${p.rect.y},${p.rect.w},${p.rect.h}` : p.i).join('|');
@@ -153,12 +235,12 @@ export function usePick({ frame, inside, scrolled, say, onReload, onFit }) {
       const answer = lead.kind === 'region'
         ? await shotRegion(frame.id, { ...lead.rect, label: 'region' })
         : picks.length > 1
-          ? await shotOf(frame.id, { i: lead.i, mode: 'marked', marks: picks.filter(p => p.kind !== 'region').map((p, n) => ({ i: p.i, n: n + 1 })), label: frame.title })
-          : await shotOf(frame.id, { i: lead.i, mode: 'element', label: labelOf(lead.el) });
+          ? await shotOf(frame.id, { i: lead.i, find: S.current.frame.local ? findNow(lead.i) : undefined, mode: 'marked', marks: picks.filter(p => p.kind !== 'region').map((p, n) => ({ i: p.i, find: findNow(p.i), n: n + 1 })), label: frame.title })
+          : await shotOf(frame.id, { i: lead.i, find: findNow(lead.i), mode: 'element', label: labelOf(lead.el) });
       if (alive && answer.name) setThumb({ key: pickKey, ...answer });
     }, 120);
     return () => { alive = false; clearTimeout(timer); };
-  }, [pickKey, frameId, scanKey]);
+  }, [pickKey, frameId, scanKey, frame && frame.local && picks.length ? Object.keys(details).length : 0]);
 
   useEffect(() => {
     if (!frame) return;
@@ -230,8 +312,8 @@ export function usePick({ frame, inside, scrolled, say, onReload, onFit }) {
     const lead = items[0];
     let shot;
     if (lead.kind === 'region') shot = await shotRegion(f.id, { ...lead.rect, label: 'region' });
-    else if (items.length > 1) shot = await shotOf(f.id, { i: lead.i, mode: 'marked', marks: items.map((p, n) => ({ i: p.i, n: n + 1 })), label: f.title });
-    else shot = await shotOf(f.id, { i: lead.i, mode: mode || 'element', marks: [{ i: lead.i, n: 0 }], label: labelOf(lead.el) });
+    else if (items.length > 1) shot = await shotOf(f.id, { i: lead.i, find: findOf(lead.i), mode: 'marked', marks: items.map((p, n) => ({ i: p.i, find: findOf(p.i), n: n + 1 })), label: f.title });
+    else shot = await shotOf(f.id, { i: lead.i, find: findOf(lead.i), mode: mode || 'element', marks: [{ i: lead.i, find: findOf(lead.i), n: 0 }], label: labelOf(lead.el) });
     if (shot.error || shot.stale) return { error: shot.error || 'The page has changed. Choose the element again.' };
     const ref = S.current.reference;
     if (!ref) return shot;
@@ -286,7 +368,7 @@ export function usePick({ frame, inside, scrolled, say, onReload, onFit }) {
       const p = S.current.picks[0];
       if (!p || p.kind !== 'el') return;
       await working('Putting it in each state...', async () => {
-        const made = await shotStatesOf(S.current.frame.id, p.i);
+        const made = await shotStatesOf(S.current.frame.id, p.i, findOf(p.i));
         if (made.error || made.stale) return say(S.current.frame.id, made.error || 'choose it again');
         setDialog({
           type: 'image', title: 'States', name: made.name, file: made.file,
@@ -313,7 +395,7 @@ export function usePick({ frame, inside, scrolled, say, onReload, onFit }) {
       const p = S.current.picks[0];
       if (!p || p.kind !== 'el') return;
       await working('Remembering how it looks...', async () => {
-        const made = await rememberLook(S.current.frame.id, p.i, labelOf(p.el));
+        const made = await rememberLook(S.current.frame.id, p.i, labelOf(p.el), findOf(p.i));
         if (made.error || made.stale) return say(S.current.frame.id, made.error || 'choose it again');
         say(S.current.frame.id, made.git ? 'look remembered, with the files' : 'look remembered');
         getRemembered(S.current.frame.id).then(setRemembered).catch(() => {});

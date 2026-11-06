@@ -147,7 +147,7 @@ export async function draw(page, url, { wait = 700, timeout = 60000, still = fal
 // So: wait for the page to hold still (its height and the number of things in it
 // unchanged for a while) and for nothing fixed to be laid over most of the window. A page
 // that never does is read anyway after a while, because what is on it then is the answer.
-export async function settle(page, { max = 12000, hold = 1400, step = 350 } = {}) {
+export async function settle(page, { max = 12000, hold = 700, step = 200 } = {}) {
   const began = Date.now();
   let last = '';
   let since = Date.now();

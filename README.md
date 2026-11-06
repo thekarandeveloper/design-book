@@ -363,6 +363,14 @@ on the smallest one, a change to a component to `design-build` on the middle one
 prompt names the agent, so the work goes there without anybody switching. Both agents are
 installed in `~/.claude/agents/` and hand back two lines.
 
+**How fast it is, and why.** A page of the board's own is on the board's origin, so it is read
+in place: the same functions run in its iframe and the first outline is there in about 130 ms,
+with no browser started. A frame running a project's own dev server is another origin and has to
+be read by the headless browser, which takes as long as the site takes to draw itself (a loader
+counts), so that page is opened in the background once the pointer has rested on its frame for a
+third of a second: after the pointer has been on it for nine seconds the first outline took 2.2 s,
+and from cold, on a site with a heavy loader, it took 19 s.
+
 How it works, because it matters: a frame running a project's own dev server is another
 origin and cannot be read from the board. So the headless browser opens the same address at
 the same width, waits for it to stop moving (a loader is not the page), reads every element

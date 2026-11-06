@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FRAME_GROUPS } from './frames.js';
 import { holdWheel, onEachFrame, wheelStep } from './navigate.js';
 import { SleeperContext, createSleeper } from './awake.js';
-import { usePick, PickLayer, PickPanel, PickDialogs } from './Pick.jsx';
+import { usePick, PickLayer, PickPanel, PickDialogs, warmAhead } from './Pick.jsx';
 import { labelOf } from './pick.js';
 
 // The board: sections, zoom, pan, selection, frames you can move between sections and
@@ -43,6 +43,8 @@ export function Board({
   const boardRef = useRef(null);
   const worldRef = useRef(null);
   const pickWorldRef = useRef(null);
+  // The pointer has been on a frame long enough that it is probably about to be chosen.
+  const warming = useRef(0);
   const [view, setView] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('st-view:' + storageKey) || 'null');
@@ -604,6 +606,8 @@ export function Board({
               transform: isDragging ? `translate(${drag.dx}px, ${drag.dy}px)` : undefined
             }}
             onPointerDown={() => { if (f.id !== selected) { select(f.id); centreOn(f.id); } }}
+            onPointerEnter={() => { clearTimeout(warming.current); warming.current = setTimeout(() => warmAhead(f), 350); }}
+            onPointerLeave={() => clearTimeout(warming.current)}
             onDoubleClick={() => setInside(f.id)}
             onContextMenu={ev => {
               ev.preventDefault();

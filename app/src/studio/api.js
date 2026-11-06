@@ -124,10 +124,12 @@ export const auditElement = (page, i) => ask('/__api/audit', { page, i });
 // boxed, `marked` for several at once, each with its number.
 export const shotOf = (page, body) => ask('/__api/shot', { page, ...body });
 export const shotRegion = (page, rect) => ask('/__api/shot/rect', { page, ...rect });
-export const shotStatesOf = (page, i) => ask('/__api/shot/states', { page, i });
+export const shotStatesOf = (page, i, find) => ask('/__api/shot/states', { page, i, find });
 export const shotSizesOf = (page, find, widths) => ask('/__api/shot/sizes', { page, find, widths });
 // Remembering how an element looked, with the project's files as they were, and coming back.
-export const rememberLook = (page, i, label) => ask('/__api/remember', { page, i, label });
+export const rememberLook = (page, i, label, find) => ask('/__api/remember', { page, i, label, find });
+// Opens the page in the headless browser ahead of the first question that needs it.
+export const warmFrame = page => ask('/__api/warm', { page });
 export const compareLook = (page, id) => ask('/__api/compare', { page, id });
 export const undoLook = (page, id, files) => ask('/__api/undo', { page, id, files });
 export const redoLook = (page, id) => ask('/__api/redo', { page, id });

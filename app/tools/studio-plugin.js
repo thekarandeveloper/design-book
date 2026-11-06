@@ -24,7 +24,7 @@ import { measureHeight, stopMeasuring } from './measure.js';
 import { ensurePoster, readPoster, forgetPoster, cacheRoot } from './posters.js';
 import {
   session as inspectSession, forgetSessions, scan as inspectScan, detail as inspectDetail,
-  shotElement, shotRect, shotStates, shotSizes, shotAgain, sheetOf, auditElement, keepPicture
+  shotElement, shotRect, shotStates, shotSizes, shotAgain, sheetOf, auditElement, keepPicture, locate
 } from './inspect.js';
 import { snapshot as gitSnapshot, since as gitSince, restore as gitRestore } from './remember.js';
 import { readNativeTokens } from './native.js';
@@ -1155,7 +1155,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
           // headless browser opens the same address at the same width and reads that. A
           // session keeps one frame open for a couple of minutes, so asking about a second
           // element does not draw the page again. See inspect.js.
-          if (/^\/(scan|element|audit|shot|remember|compare|undo|redo)/.test(route) && req.method === 'POST') {
+          if (/^\/(scan|warm|element|audit|shot|remember|compare|undo|redo)/.test(route) && req.method === 'POST') {
             const asked = await body();
             const found = listPages().find(p => p.id === (asked.page || ''));
             const gone = route === '/compare' || route === '/undo' || route === '/redo';
@@ -1178,20 +1178,35 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
                 return job();
               }
             };
+            // An element named by where it is (the board read the page itself, so its numbers are
+            // not the server's), or by the number the server's own scan gave it.
+            const idx = async (find, i) => (find && Array.isArray(find.path)
+              ? retry(async () => locate(await open(), find))
+              : Number(i));
+            const marksOf = async list => (Array.isArray(list)
+              ? Promise.all(list.map(async m => ({ i: await idx(m.find, m.i), n: Number(m.n) || 0 })))
+              : []);
             try {
+              // Only opens the page, so the first question is not the one that pays for it.
+              if (route === '/warm') {
+                open().catch(() => {});
+                return send({ ok: true });
+              }
               if (route === '/scan') {
                 return send({ ok: true, ...(await retry(async () => inspectScan(await open(asked.fresh)))) });
               }
               if (route === '/element') {
-                return send(await retry(async () => inspectDetail(await open(), Number(asked.i), { root: projectRoot(), studioRoot })));
+                return send(await retry(async () => inspectDetail(await open(), await idx(asked.find, asked.i), { root: projectRoot(), studioRoot })));
               }
               if (route === '/audit') {
-                return send(await retry(async () => auditElement(await open(), Number(asked.i), { screen, touch: screen && found.frame.width <= 500 })));
+                return send(await retry(async () => auditElement(await open(), await idx(asked.find, asked.i), { screen, touch: screen && found.frame.width <= 500 })));
               }
               if (route === '/shot') {
+                const lead = await idx(asked.find, asked.i);
+                const marks = await marksOf(asked.marks);
                 const made = await retry(async () => shotElement(await open(), {
-                  i: Number(asked.i), mode: asked.mode, pad: Number(asked.pad) || 8, dir: shots,
-                  marks: Array.isArray(asked.marks) ? asked.marks.map(m => ({ i: Number(m.i), n: Number(m.n) || 0 })) : [],
+                  i: lead, mode: asked.mode, pad: Number(asked.pad) || 8, dir: shots,
+                  marks,
                   label: asked.label || found.title
                 }));
                 return send(made.stale ? { stale: true } : { ok: true, ...made });
@@ -1200,7 +1215,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
                 return send({ ok: true, ...(await retry(async () => shotRect(await open(), { x: Number(asked.x), y: Number(asked.y), w: Number(asked.w), h: Number(asked.h), dir: shots, label: asked.label || found.title }))) });
               }
               if (route === '/shot/states') {
-                const made = await retry(async () => shotStates(await open(), { i: Number(asked.i), dir: shots, label: asked.label || found.title }));
+                const made = await retry(async () => shotStates(await open(), { i: await idx(asked.find, asked.i), dir: shots, label: asked.label || found.title }));
                 return send(made.stale ? { stale: true } : { ok: true, ...made });
               }
               if (route === '/shot/sizes') {
@@ -1218,9 +1233,10 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
 
               if (route === '/remember') {
                 const live = await retry(async () => open());
-                const d = await inspectDetail(live, Number(asked.i), { root: projectRoot(), studioRoot });
+                const at = await idx(asked.find, asked.i);
+                const d = await inspectDetail(live, at, { root: projectRoot(), studioRoot });
                 if (d.stale) return send({ stale: true });
-                const shot = await shotElement(live, { i: Number(asked.i), mode: 'element', dir: shots, label: 'before' });
+                const shot = await shotElement(live, { i: at, mode: 'element', dir: shots, label: 'before' });
                 const snap = await gitSnapshot(projectRoot());
                 const item = {
                   id: Date.now().toString(36), page: found.id, label: asked.label || d.tag, at: Date.now(),
