@@ -27,6 +27,7 @@ import {
   shotElement, shotRect, shotStates, shotSizes, shotAgain, sheetOf, auditElement, keepPicture
 } from './inspect.js';
 import { snapshot as gitSnapshot, since as gitSince, restore as gitRestore } from './remember.js';
+import { readNativeTokens } from './native.js';
 import { isScreenSize } from '../src/studio/frames.js';
 
 const JSONH = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
@@ -119,6 +120,18 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
       paletteCache = { at: now, root, value: readPalette(root) };
     }
     return paletteCache.value;
+  }
+  // A native project's design system, read from its Swift and Kotlin. A few seconds, because
+  // reading is cheap and the file somebody is editing is the one that has to be current.
+  let nativeCache = { at: 0, root: '', value: null };
+  function nativeFor(root) {
+    const now = Date.now();
+    if (nativeCache.root !== root || now - nativeCache.at > 3000) {
+      let value = null;
+      try { value = readNativeTokens(root); } catch (_) {}
+      nativeCache = { at: now, root, value };
+    }
+    return nativeCache.value;
   }
   function project() {
     const root = projectRoot();
@@ -279,6 +292,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
         // came to. A screen is the exception, because a screen scrolls.
         sized: !!meta.height && meta.grow !== 'yes',
         group: meta.group || '',
+        sources: meta.source ? meta.source.split(',').map(f => f.trim()).filter(Boolean) : [],
         x: null,
         y: null
       });
@@ -296,6 +310,21 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
       // it when its own page changed, not whenever anything on the board did: a board
       // where every tall frame re-measures on a timer is a board that shuffles under you.
       try { page.changed = Math.round(fs.statSync(page.path).mtimeMs); } catch (_) {}
+
+      // A page built from code says which code (`designbook-source`), and when any of that
+      // code is newer than the page the page is out of date, whatever it looks like. A copy
+      // of a screen drifts from the screen the week somebody changes the screen.
+      if (page.sources && page.sources.length && page.changed) {
+        const root = projectRoot();
+        const newer = [];
+        for (const rel of page.sources) {
+          try {
+            const at = fs.statSync(path.resolve(root, rel)).mtimeMs;
+            if (at > page.changed + 1000) newer.push(rel);
+          } catch (_) {}
+        }
+        if (newer.length) page.stale = newer;
+      }
     }
 
     const positions = readBoard().frames;
@@ -673,6 +702,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
     const pages = listPages();
     return rulesBody({
       palette: paletteFor(root),
+      native: nativeFor(root),
       projectRoot: root,
       board: boardPath(),
       live: live && live.url ? { url: live.url, command: liveConfig().command } : null,
@@ -814,6 +844,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
           const pages = listPages();
           writeRules(dir('CLAUDE.md'), rulesBody({
             palette: paletteFor(root),
+            native: nativeFor(root),
             projectRoot: root,
             board: boardPath(),
             live: live && live.url ? { url: live.url, command: liveConfig().command } : null,

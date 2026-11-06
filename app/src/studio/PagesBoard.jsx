@@ -407,6 +407,8 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
     canDelete: page.source === 'canvas',
     check: checks[page.id] || null,
     sideways: sideways[page.id] || null,
+    // The code this page was drawn from has changed since the page was written.
+    stale: page.stale || null,
     // Has its own scrolling: a page in an iframe that is taller than the frame. Not known
     // yet counts as yes, so a frame is never locked out of its wheel by a measurement that
     // has not come back.

@@ -282,6 +282,21 @@ is tucked into the left edge of the viewport, flush against it, and held there w
 part of that section is on screen, so panning never leaves you looking at frames that
 belong to nothing and never leaves a name floating over the work.
 
+## Native projects are read from their code
+
+A SwiftUI or Compose design system lives in Swift and Kotlin, not in a stylesheet, so it is
+read from there. The generated section of `.designbook/CLAUDE.md` says what the code decides:
+each colour role resolved to hex in light and dark (`theme.primary` is `#2E7BF6` and
+`#4A82D6`, found by following `brand.light.level5` and `brand.dark.level8` to their hex),
+the type scale as the code sets it, spacing, radii, opacity, elevation and timings, and the
+colours in asset catalogues. A name that points at another constant is followed, so the
+iOS `DS.Spacing.cardHorizontal` comes out as the 18 it is defined as in the shared Kotlin.
+It is rebuilt when those files change, which is what keeps it from being older than the
+code, and it replaces reading three or four token files before each screen.
+
+A page built from code says which code (`<meta name="designbook-source" content="a.swift,b.swift">`),
+and when any of those files is newer than the page the frame is marked "Code changed".
+
 ## Choosing things inside a frame
 
 Choose a frame, and hover anything on it: it is outlined with its name and its size. Click

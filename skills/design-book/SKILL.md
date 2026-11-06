@@ -110,47 +110,66 @@ can do the job, and say so when you do.
 | The app is | Where its components are | What to do |
 |---|---|---|
 | Astro, Next, Vue, Svelte | `src/components`, `app`, `components` | Import them. A page on the board is a real page of the project. |
-| SwiftUI | `*/Views`, `*/DesignSystem`, `*/Components` | Read the real values out of the Swift and draw the screen in HTML with those numbers. It is approximate until it has been compared with the app, see below. |
-| Compose | `*/ui`, `*/designsystem`, `*/components` | The same: read the dp and the shapes, then draw in HTML. Approximate until compared. |
+| SwiftUI | `*/Views`, `*/DesignSystem`, `*/Components` | Read the screen and the design system it uses, and draw it in HTML with those numbers. See below. |
+| Compose | `*/ui`, `*/designsystem`, `*/components` | The same: read the dp and the shapes, then draw in HTML. |
 
 For a web project, write the page in the project's own language so it compiles with the
 project's own dev server. For a native project the board cannot run Swift or Kotlin, so
 the page is HTML, and its value comes from using the app's **real numbers** rather than
 invented ones. Real numbers make it close. They do not make it a copy.
 
-## A copy of a native screen is approximate until it has been compared
+## A native screen, built from its code
 
-Code says what a screen is made of, not what it looks like. The navigation bar, the tab bar,
-a sheet's scaffold, glass buttons, system icons and the spacing the system adds are not in
-the file you read. A screen drawn from code alone is a guess that looks tidy, and a tidy
-guess passes every check the board has, because none of them look at the app. So:
+Everything a screen is made of is in its code, so build it from the code and nothing else.
+No screenshot and no simulator are needed, and none is asked for. What makes it right is
+reading all of it and following every value to a number.
 
-1. **No reference, no "replica" and no "exact".** A reference is a simulator screenshot of
-   that exact screen, or a Figma frame of it. Without one, end the frame's title with
-   `(approx)` and say "approximate, from code", in your messages and nowhere stronger.
-2. **Get the reference first.** For a native app, build it, run it in the simulator and
-   capture each screen before drawing any (`xcrun simctl io booted screenshot <file>`). Keep
-   them in `.designbook/refs/`, named for the frame.
-3. **One screen first.** When the ask spans many screens, make one, put it beside its
-   reference and show that before doing the rest. To put them side by side: choose the frame,
-   press the up arrow until it says Page, right-click, "Add a reference", then "Copy
-   screenshot". Fix what differs, then continue, and compare each screen as you go.
-4. **Read the whole file of every screen you copy,** and the chrome it sits in: the
-   navigation bar, the tab bar, the sheet. Grepping for text and icon names is not reading.
-5. **Say the limits in the first message,** not the last: icons that had to be substituted
-   (SF Symbols do not render in a browser), data that is invented, screens you did not read.
-6. **Mark invented data** as sample, at the top of the page in a comment, so it is not taken
-   for the app's own. Use the app's fixtures where it has them.
-7. **Read the tokens again before starting,** and `git status` the token files: if they are
-   modified, the colours you remember may be out of date, so say so.
-8. **Confirm where the board belongs before the first file:** the project the app lives in,
-   not the workspace around it. Say which, and wait if it is not obvious.
-9. **Verify on the board, not in the file.** `curl -s $B/studio` lists the frame ids (a page
-   in `.designbook/pages` ends in `.html`) and `curl -s $B/board` the sections. A board file
-   with ids that do not match shows nothing. Run `POST $B/check` on every frame, not a sample.
-10. **A generator lives in the project,** under `.designbook/`, never in a scratchpad that
-    disappears. Say that the pages it writes are output, not meant to be edited by hand.
-11. **Leave checked-in instruction files alone** (`CLAUDE.md`, `AGENTS.md`) unless you were
+1. **Start from the board's own table.** `.designbook/CLAUDE.md` has a section "The design
+   system, read from its code": every colour role resolved to hex in light and dark, the
+   type scale, spacing, radii and timings, with the names the code uses. It is rebuilt when
+   those files change, so it is never older than the code. Do not read the token files to
+   learn what it already says.
+2. **Read the whole file of the screen.** Not a grep for its text and icon names: a screen
+   you did not read is a screen you made up. Then read every design-system component it
+   uses far enough to know what it draws. An app that draws its own navigation bar, sheet
+   header, buttons and cards has its chrome in code (`DSNavigationBar`, `DSSheetHeader`,
+   `DSButton`), and that is where to read it, not guess it.
+3. **Read how the screen is presented:** `NavigationStack`, `TabView`, `.sheet`,
+   `presentationDetents`, `.toolbar`, the root and the tab style. That is the chrome around it.
+4. **Follow every value to a number.** `DS.Spacing.cardHorizontal` is 18, `.font(.theme.body)`
+   is 17 regular, `Color.theme.surface` is two hexes. The table gives most of them; for the
+   rest follow the reference in the code. A value you could not follow is a value to say you
+   could not.
+5. **System chrome the app does not draw** (status bar, home indicator, the system's own
+   navigation or tab bar when the app uses the default) comes from the platform. Use these
+   and say they are assumed: iPhone 393 x 852 has a 59 top safe area and 34 at the bottom, a
+   44 navigation bar (96 with a large title), a 49 tab bar above the bottom safe area, and a
+   44 row. An Android phone 360 x 800 has a 24 status bar, a 64 top app bar and an 80
+   navigation bar. If the project overrides one, the code wins.
+6. **Icons that are the system's** (SF Symbols, Material icons) do not render in a browser.
+   Draw the closest simple inline SVG and give it `data-symbol="chevron.right"`, so what it
+   stands for is on the page, and list the substituted names in your first message.
+7. **Data:** use the app's own preview or fixture data where it has some (`#Preview`,
+   `PreviewData`, mock objects). Where it has none, write sample data and mark it in a
+   comment at the top of the page, so it is not taken for the app's.
+8. **Say which code the page came from:** `<meta name="designbook-source" content="path/A.swift,path/B.swift">`
+   listing every file it was built from. When any of them is newer than the page the board
+   puts "Code changed" on the frame, which is the signal that the page no longer matches.
+9. **Say what the code could not settle, in the first message and not the last:** assumed
+   system metrics, substituted icons, sample data, files you did not read. Call the result
+   "built from the code". Do not call it pixel-exact: nothing was compared, and nobody
+   needs it to be, because the code is the source.
+10. **When the ask spans many screens,** make one first and show it, so the method is
+    agreed before it is thirty files. If the people want a screen compared with the running
+    app, they will say so.
+11. **Confirm where the board belongs** before the first file: the project the app is in,
+    not the workspace around it. Say which, and wait if it is not obvious.
+12. **Verify on the board, not in the file.** `curl -s $B/studio` lists the frame ids (a page
+    in `.designbook/pages` ends in `.html`) and `curl -s $B/board` the sections. A board file
+    with ids that do not match shows nothing. Run `POST $B/check` on every frame, not a sample.
+13. **A generator lives in the project,** under `.designbook/`, never in a scratchpad that
+    disappears, and its pages are output, not meant to be edited by hand.
+14. **Leave checked-in instruction files alone** (`CLAUDE.md`, `AGENTS.md`) unless you were
     asked to change them, and say so when you touched one.
 
 ## Units: pt, dp and px are the same number here
@@ -390,9 +409,8 @@ it.
 The board is already up, the frames have loaded what you made, and the check is clean.
 Say in one line what changed, and name anything the check found that you decided to
 leave. If you made more than one version, say in one
-line what each is trying, so there is something to choose between. For a copy of a native
-screen, say whether it was compared with a reference and what still differs; if it was not,
-say that it is approximate.
+line what each is trying, so there is something to choose between. For a screen built from
+native code, say which files it was built from and what the code could not settle.
 
 ## Bringing a frame into the project
 

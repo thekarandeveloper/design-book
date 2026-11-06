@@ -7,6 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { nativeTokenLines } from './native.js';
 
 const START = '<!-- canvas:generated start -->';
 const END = '<!-- canvas:generated end -->';
@@ -56,7 +57,7 @@ in the \`design-book\` skill, which loads itself when there is designing to do.
 `;
 }
 
-export function rulesBody({ projectRoot, live, pages, sections, refs, parts, components, styles, tokens, preview, palette, board }) {
+export function rulesBody({ projectRoot, live, pages, sections, refs, parts, components, styles, tokens, preview, palette, native, board }) {
   const L = [];
   L.push('## What is on this board right now');
   L.push('');
@@ -165,7 +166,23 @@ export function rulesBody({ projectRoot, live, pages, sections, refs, parts, com
     }
   }
 
-  if (palette) {
+  // A native project's design system, read from its code: the colours the roles resolve
+  // to in light and dark, the type, the spacing and the radii, with the names the code
+  // uses. It is what an agent would otherwise read three or four files to find, and it is
+  // read again whenever those files change, so it is never older than the code.
+  if (native) {
+    L.push('### The design system, read from its code');
+    L.push('');
+    L.push('Built from the Swift and Kotlin source as it is now. Use these values and these names,');
+    L.push('not a colour or a size of your own. Where a role is written as `brand.light.level5` the');
+    L.push('code refers to it by that name.');
+    L.push('');
+    L.push(...nativeTokenLines(native));
+  }
+
+  // A native project's hex strings are counted by the system above; counting them again as
+  // "most used" would only offer a few of them as though they were all.
+  if (palette && !(native && native.roles.length)) {
     L.push('### Everything the project already uses');
     L.push('');
     L.push(`Read from ${palette.files} files. Build experiments out of these rather than`);

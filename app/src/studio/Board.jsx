@@ -801,6 +801,14 @@ export function Board({
                   {f.sideways.clipped ? 'Cut off at the side' : 'Scrolls sideways'}
                 </span>
               ) : null}
+              {f.stale ? (
+                <span
+                  className="st-found st-wide"
+                  title={`The code this page was drawn from is newer than the page: ${f.stale.join(', ')}. The page may no longer match it.`}
+                >
+                  Code changed
+                </span>
+              ) : null}
               {f.note ? <span className="st-said">{f.note}</span> : null}
             </div>
           );
