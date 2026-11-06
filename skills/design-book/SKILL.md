@@ -122,51 +122,67 @@ invented ones. Real numbers make it close. They do not make it a copy.
 
 Everything a screen is made of is in its code, so build it from the code and nothing else.
 No screenshot and no simulator are needed, and none is asked for. What makes it right is
-reading all of it and following every value to a number.
+settling **which screen** it is, reading all of it, and following every value to a number.
+Most of the ways this goes wrong are the first of those, so it comes first.
 
-1. **Start from the board's own table.** `.designbook/CLAUDE.md` has a section "The design
-   system, read from its code": every colour role resolved to hex in light and dark, the
-   type scale, spacing, radii and timings, with the names the code uses. It is rebuilt when
-   those files change, so it is never older than the code. Do not read the token files to
-   learn what it already says.
-2. **Read the whole file of the screen.** Not a grep for its text and icon names: a screen
-   you did not read is a screen you made up. Then read every design-system component it
-   uses far enough to know what it draws. An app that draws its own navigation bar, sheet
-   header, buttons and cards has its chrome in code (`DSNavigationBar`, `DSSheetHeader`,
-   `DSButton`), and that is where to read it, not guess it.
-3. **Read how the screen is presented:** `NavigationStack`, `TabView`, `.sheet`,
-   `presentationDetents`, `.toolbar`, the root and the tab style. That is the chrome around it.
-4. **Follow every value to a number.** `DS.Spacing.cardHorizontal` is 18, `.font(.theme.body)`
-   is 17 regular, `Color.theme.surface` is two hexes. The table gives most of them; for the
-   rest follow the reference in the code. A value you could not follow is a value to say you
-   could not.
-5. **System chrome the app does not draw** (status bar, home indicator, the system's own
-   navigation or tab bar when the app uses the default) comes from the platform. Use these
-   and say they are assumed: iPhone 393 x 852 has a 59 top safe area and 34 at the bottom, a
-   44 navigation bar (96 with a large title), a 49 tab bar above the bottom safe area, and a
-   44 row. An Android phone 360 x 800 has a 24 status bar, a 64 top app bar and an 80
-   navigation bar. If the project overrides one, the code wins.
-6. **Icons that are the system's** (SF Symbols, Material icons) do not render in a browser.
-   Draw the closest simple inline SVG and give it `data-symbol="chevron.right"`, so what it
-   stands for is on the page, and list the substituted names in your first message.
-7. **Data:** use the app's own preview or fixture data where it has some (`#Preview`,
-   `PreviewData`, mock objects). Where it has none, write sample data and mark it in a
-   comment at the top of the page, so it is not taken for the app's.
+1. **Settle which screen "the app" opens on, before drawing anything.** An app opens on
+   different screens depending on a flag, a missing key or a build setting, and the name of a
+   screen file is not evidence that it is the one people see. Start at the root (`@main`,
+   `RootView`, `MainFlowView`, `MainActivity`) and follow every condition down to what is
+   shown on a fresh install in the build people run, which is Debug. `.designbook/CLAUDE.md`
+   lists "Modes the app opens in": every launch argument and variable the app reads and where.
+   Read the first ones. A catalogue shown when a backend key is empty, a demo behind a flag,
+   onboarding when nobody is signed in: each is a different "Home". Say in your first message
+   which one is the default and which screens exist only in the others, and build the default
+   first. An older screen that is no longer reached (a comment saying "the original Home was...")
+   is the wrong one, however well it reads.
+2. **Start from the board's own table.** `.designbook/CLAUDE.md` has "The design system,
+   read from its code": every colour role resolved to hex in light and dark, the type scale,
+   spacing, radii and timings, with the names the code uses. It is rebuilt when those files
+   change. Do not read the token files to learn what it already says.
+3. **Read the whole file of the screen,** not a grep for its text and icon names. Then read
+   every design-system component it uses far enough to know what it draws, and the styles it
+   picks: a header that fills with a `headerGround` colour and runs under the status bar is
+   a different screen from one on the page colour. An app that draws its own bars, sheets,
+   buttons and cards has its chrome in code (`DSNavigationBar`, `DSSheetHeader`, `DSButton`).
+4. **Follow every value to a number,** and every number to where it comes from. A colour
+   role is two hexes. `DS.Spacing.cardHorizontal` is 18. And a figure that is *computed* is
+   read from what it is computed from: a tile that says "27 components in 7 sections" is
+   counting a list (`ComponentCatalog`), so read that list and count it, do not write a
+   number that looks plausible. Sample data is only for what is truly runtime: a name, a
+   record count the user made.
+5. **Read how it is presented:** `NavigationStack`, `TabView`, `.sheet`, `presentationDetents`,
+   `.toolbar`, the tab style, and what happens under the safe areas.
+6. **System chrome depends on the OS the app runs on, not on the code.** A native `TabView`
+   or navigation bar is drawn by the system, and what it looks like changes with the OS
+   release: on iOS 26 and later (Liquid Glass) a native tab bar is a floating glass capsule
+   a little above the bottom edge, not a full-width 49 bar on the bottom, and bars and
+   buttons are translucent glass. Check the deployment target and the SDK in the project, but
+   a deployment target of 18 does not mean it runs on 18: the app is built with the newest
+   SDK and run on a current device. So assume the **current** OS look, say which you assumed,
+   and if the people say what they run, use that. Measured from one iPhone screenshot at
+   393 x 852: a two tab floating capsule is about 188 wide and 58 tall, centred, with about
+   25 below it; its selected tab sits in a lighter capsule inside it. A phone's status bar
+   shows the real time, signal, Wi-Fi and battery, not placeholder text, and takes the
+   colour of what is under it: light text on a dark header, dark text on a light one.
+   Android 360 x 800: 24 status bar, 64 top app bar, 80 navigation bar. If the code overrides
+   one of these, the code wins.
+7. **Icons that are the system's** (SF Symbols, Material icons) do not render in a browser.
+   Draw the closest simple inline SVG and give it `data-symbol="chevron.right"`, and list the
+   substituted names in your first message.
 8. **Say which code the page came from:** `<meta name="designbook-source" content="path/A.swift,path/B.swift">`
-   listing every file it was built from. When any of them is newer than the page the board
-   puts "Code changed" on the frame, which is the signal that the page no longer matches.
-9. **Say what the code could not settle, in the first message and not the last:** assumed
-   system metrics, substituted icons, sample data, files you did not read. Call the result
-   "built from the code". Do not call it pixel-exact: nothing was compared, and nobody
-   needs it to be, because the code is the source.
-10. **When the ask spans many screens,** make one first and show it, so the method is
-    agreed before it is thirty files. If the people want a screen compared with the running
-    app, they will say so.
+   listing every file it was built from. When any is newer than the page, the board puts
+   "Code changed" on the frame.
+9. **Say what the code could not settle, in the first message and not the last:** which
+   mode you built, the OS look you assumed, substituted icons, sample data, files you did not
+   read. Call the result "built from the code", not pixel-exact.
+10. **When the ask spans many screens,** make one first, the default home, and show it before
+    the rest, so a wrong first choice costs one screen and not thirty.
 11. **Confirm where the board belongs** before the first file: the project the app is in,
-    not the workspace around it. Say which, and wait if it is not obvious.
+    not the workspace around it.
 12. **Verify on the board, not in the file.** `curl -s $B/studio` lists the frame ids (a page
-    in `.designbook/pages` ends in `.html`) and `curl -s $B/board` the sections. A board file
-    with ids that do not match shows nothing. Run `POST $B/check` on every frame, not a sample.
+    in `.designbook/pages` ends in `.html`) and `curl -s $B/board` the sections. Run
+    `POST $B/check` on every frame, not a sample.
 13. **A generator lives in the project,** under `.designbook/`, never in a scratchpad that
     disappears, and its pages are output, not meant to be edited by hand.
 14. **Leave checked-in instruction files alone** (`CLAUDE.md`, `AGENTS.md`) unless you were

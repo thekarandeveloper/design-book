@@ -1835,7 +1835,16 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
         if (target.endsWith('.html')) {
           try {
             const raw = fs.readFileSync(target, 'utf8');
-            const html = await server.transformIndexHtml(req.originalUrl || req.url, raw);
+            let html = await server.transformIndexHtml(req.originalUrl || req.url, raw);
+            // A frame is a picture of a screen, and a screen has no scrollbar down its side.
+            // A page of the board that is as wide as its frame gets one anyway the moment it
+            // is a pixel taller, and the bar takes its own width out of the page, which then
+            // scrolls sideways as well. So the bars are taken away, last in the head so a
+            // page's own rule cannot put them back; the page still scrolls.
+            if (rel.startsWith('/pages/')) {
+              const bars = '<style data-designbook>html{scrollbar-width:none!important}html::-webkit-scrollbar,body::-webkit-scrollbar{width:0!important;height:0!important}</style>';
+              html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, bars + '</head>') : bars + html;
+            }
             res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
             return res.end(html);
           } catch (err) {

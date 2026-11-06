@@ -294,6 +294,13 @@ iOS `DS.Spacing.cardHorizontal` comes out as the 18 it is defined as in the shar
 It is rebuilt when those files change, which is what keeps it from being older than the
 code, and it replaces reading three or four token files before each screen.
 
+It also lists the modes the app opens in: every launch argument and variable it reads, and
+the line that reads it. An app often opens on a different screen depending on a flag or a
+missing key (a catalogue when no backend is configured, onboarding when nobody is signed in),
+and which one is "the app" has to be settled before anything is drawn. Pages of the board
+have their scrollbars taken away, since a frame is a picture of a screen: the page still
+scrolls, but a bar no longer takes its own width and makes the page wider than its frame.
+
 A page built from code says which code (`<meta name="designbook-source" content="a.swift,b.swift">`),
 and when any of those files is newer than the page the frame is marked "Code changed".
 

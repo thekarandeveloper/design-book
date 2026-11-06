@@ -276,6 +276,63 @@ function readColorset(dir) {
   } catch (_) { return null; }
 }
 
+// ── the modes an app can open in ─────────────────────────────────────────────
+//
+// A native app often opens on different screens depending on a flag or a missing key: a
+// catalogue when the backend is not configured, onboarding when nobody is signed in, a demo
+// when a launch argument says so. Which of them a person is looking at when they say "the
+// app" is the first thing to settle, and it is written in the code as a condition on a
+// launch argument, an environment variable or a build setting. So those are listed with
+// where they are read, and what the screen is called is for whoever reads that line.
+
+function walkSwift(root) {
+  const out = [];
+  let seen = 0;
+  const visit = (dir, depth) => {
+    if (depth > 12 || seen > MOST_WALK) return;
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+    for (const e of entries) {
+      seen++;
+      if (e.isDirectory()) {
+        if (SKIP.has(e.name) || e.name.startsWith('.') || /Tests?$/.test(e.name) || /^(build-logic|buildSrc|bin|gradle)$/.test(e.name)) continue;
+        visit(path.join(dir, e.name), depth + 1);
+      } else if (/\.(swift|kt)$/.test(e.name)) out.push(path.join(dir, e.name));
+    }
+  };
+  visit(root, 0);
+  return out;
+}
+
+const FLAG = [
+  /arguments\.contains\(\s*"([A-Za-z0-9_\-]+)"\s*\)/g,
+  /environment\[\s*"([A-Za-z0-9_]+)"\s*\]/g,
+  /getenv\(\s*"([A-Za-z0-9_]+)"\s*\)/g,
+  /launchArgument\s*=\s*"([A-Za-z0-9_\-]+)"/g
+];
+
+export function readModes(root) {
+  const flags = new Map();
+  for (const file of walkSwift(root).slice(0, 4000)) {
+    let text;
+    try { if (fs.statSync(file).size > MOST_BYTES) continue; text = fs.readFileSync(file, 'utf8'); } catch (_) { continue; }
+    if (!/arguments|environment|getenv|launchArgument/.test(text)) continue;
+    const rel = path.relative(root, file);
+    for (const re of FLAG) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(text))) {
+        const name = m[1];
+        // Test plumbing and Apple's own switches are not modes of the app.
+        if (/^(UI_TESTING|-AppleLanguages|-AppleLocale|PATH|HOME|USER|TMPDIR)$/.test(name) || name.startsWith('-Apple')) continue;
+        const line = text.slice(0, m.index).split('\n').length;
+        if (!flags.has(name)) flags.set(name, `${rel}:${line}`);
+      }
+    }
+  }
+  return [...flags].map(([name, at]) => ({ name, at }));
+}
+
 // ── the whole read ───────────────────────────────────────────────────────────
 
 export function readNativeTokens(root) {
@@ -348,12 +405,23 @@ export function readNativeTokens(root) {
   }
 
   if (!roles.length && !scales.length && !constants.length && !fonts.length && !colorsets.length) return null;
-  return { roles, scales, others, constants, fonts, colorsets, files };
+  const modes = readModes(root);
+  return { roles, scales, others, constants, fonts, colorsets, files, modes };
 }
 
 // The same in words and numbers an agent reads once, as little of it as will do.
 export function nativeTokenLines(n) {
   const L = [];
+  if (n.modes && n.modes.length) {
+    L.push('Modes the app opens in (launch arguments and variables it reads, and where). Which of');
+    L.push('these is the default decides which screen is "the app", so read the first one before');
+    L.push('drawing anything:');
+    L.push('');
+    L.push('```');
+    for (const f of n.modes.slice(0, 24)) L.push(`${f.name.padEnd(26)} ${f.at}`);
+    L.push('```');
+    L.push('');
+  }
   const label = { px: '' };
   if (n.roles.length) {
     L.push('Colour roles, light / dark (resolved to hex):');
