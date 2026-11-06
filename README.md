@@ -265,7 +265,9 @@ Composition is safe to do visually; a component's internals are not.
 
 Pinch or ctrl-wheel to zoom, drag the background to pan, drag a frame's title to move it
 into a section, `1` to fit, `2` to zoom to the selected frame, `0` for 100%, Escape to
-deselect. Scrolling pans the board.
+deselect. Scrolling pans the board; over the frame you have chosen, if its page is taller than
+it, the wheel scrolls the page inside instead. `S` cuts a region, the arrows walk up and down
+the elements of a chosen frame, Alt measures.
 
 **Double-click a frame to go inside it.** A frame is a page running in an iframe, and an
 iframe takes the pointer or it does not: while it has it, every click, every scroll and
@@ -279,6 +281,47 @@ come back too. The frame you have selected says everything at any zoom. A sectio
 is tucked into the left edge of the viewport, flush against it, and held there while any
 part of that section is on screen, so panning never leaves you looking at frames that
 belong to nothing and never leaves a name floating over the work.
+
+## Choosing things inside a frame
+
+Choose a frame, and hover anything on it: it is outlined with its name and its size. Click
+to choose it, shift-click to add up to six (they are numbered), the arrows walk up and down
+the tree, Escape lets go. Hold Alt over another element and the distance to the chosen one
+is drawn across the gap. `S` cuts a region of the frame instead of an element, which is the
+way to pick something on a screen that has no elements to pick.
+
+Right-click an element and the menu is about it: a picture of it on the clipboard (alone, or
+with the frame around it and a box on it), the same as a prompt (where it is, what it is,
+the file and line it was written on, what it looks like, what is wrong with it), drawing on
+the picture first, its states side by side (hover, focus, pressed, disabled), the same
+element at 390, 768 and 1440, and a note to remember how it looks now. Remembering also
+takes a snapshot of the project's files; later the picture before and the picture now sit
+side by side, with the files that changed between them, and one button puts those files
+back. Nothing is committed and nothing is deleted, and putting them back can be undone.
+
+The panel beside the frame's own has the picture, the file and line, the type and colour
+and spacing with the project's own names for them (`--brand`, not `#2e7bf6`), what its check
+found, one-line asks to start from, a note, and a reference picture to put beside it. It
+also says which model the change needs. A colour or a line of text goes to `design-edit`
+on the smallest one, a change to a component to `design-build` on the middle one, and the
+prompt names the agent, so the work goes there without anybody switching. Both agents are
+installed in `~/.claude/agents/` and hand back two lines.
+
+How it works, because it matters: a frame running a project's own dev server is another
+origin and cannot be read from the board. So the headless browser opens the same address at
+the same width, waits for it to stop moving (a loader is not the page), reads every element
+and keeps the page open for a couple of minutes. What it finds is what is on the board
+because it is the same engine, and nothing is written into the project. The file and line
+come from the framework's own trail (React 19 keeps the stack of the call that made each
+element, Astro writes the file onto it, Svelte and Vue keep a location) turned into the
+file somebody wrote by the bundle's source map. It was checked against a real Next 16
+project: the link named "Work" resolves to the line it is written on.
+
+A page that is taller than its frame scrolls when you choose the frame and use the wheel.
+One on another origin cannot be asked where it is scrolled to, so the board says so and
+offers to put it back at the top, or to show the full content, where everything can be
+chosen. A screen that scrolls down is what a screen is for; one that is wider than its frame
+gets a mark on its name and a line in its check naming what is wider.
 
 ## Claude
 
@@ -376,6 +419,17 @@ screen before it is reached and sleeps five seconds after it leaves; the one you
 chosen never sleeps. Measured on a board of sixty frames that keep drawing: sixty
 iframes alive and twenty percent of a core while nobody touched it, against six alive
 and seven percent after.
+
+**Frames are pictures until they are worth running.** Zoomed out to see the whole board, a
+frame is a few hundred pixels across and running it would be running eighty applications to
+draw eighty thumbnails. So a frame is one of three things, worked out from where the board is
+looking and not asked of the browser: running (in view, big enough, and one of six), a
+picture of itself (in view but too small, or beyond the six), or nothing at all (out of
+view, not in the page). The picture is drawn once by the headless browser and kept outside
+the repo, and it is also what a frame shows while its page loads, so waking one never
+flashes white. This is how tldraw works out what to render, and how Figma and Framer show a
+frame that is too small to read. Measured on a board of fourteen: fourteen iframes at Fit,
+none after; two at 100%, and a frame five seconds out of view is gone.
 
 ## What the board does not do
 

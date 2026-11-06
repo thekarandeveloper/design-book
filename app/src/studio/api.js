@@ -30,6 +30,17 @@ export const find = q => json(`/__api/find?q=${encodeURIComponent(q)}`);
 // cannot measure a live page itself: it is another address, and a copy of it served from
 // here never finishes drawing itself.
 export const measurePage = (url, width, viewport) => send('/__api/measure', 'POST', { url, width, viewport });
+// A frame's picture, drawn once by the headless browser and kept on disk: what a frame
+// shows while it is too small to run, or has not finished loading. `again` throws away the
+// old one first. Answers when it is drawn, or says why it cannot be yet.
+export const ensurePoster = (page, again) => send('/__api/poster', 'POST', { page, again: !!again });
+// Told when a picture has been drawn, or could not be yet. Asking for one answers at once
+// and the picture comes later, over the same socket as every other change on the board.
+export function onPoster(handler) {
+  if (!import.meta.hot) return () => {};
+  import.meta.hot.on('studio:poster', handler);
+  return () => import.meta.hot.off('studio:poster', handler);
+}
 // Look at a frame the way a designer would: contrast, cut off edges, small targets.
 export const checkFrame = page => send('/__api/check', 'POST', { page });
 export const deleteFrame = page => send('/__api/frame/delete', 'POST', { page });
@@ -89,3 +100,40 @@ export function onStudioChanged(handler) {
     import.meta.hot.off('studio:live', live);
   };
 }
+
+// ── reading a frame, one element at a time ──────────────────────────────────
+//
+// These answer with the error rather than throwing on it: a page that is not being served
+// yet or an element that has gone is something to say on the panel, not an exception.
+const ask = (url, body, signal) => fetch(url, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+  signal
+}).then(r => r.json().catch(() => ({ error: `the board server answered ${r.status}` })));
+
+// Every element on the frame that can be seen, with its box, its words and its classes.
+// `signal` lets a request nobody wants any more be given up, which frees the connection it
+// was holding: a scan takes seconds, and a browser only keeps six to one address.
+export const scanFrame = (page, fresh, signal) => ask('/__api/scan', { page, fresh: !!fresh }, signal);
+// One element in full: its styles, its tokens, the file and line it was written in.
+export const elementDetail = (page, i) => ask('/__api/element', { page, i });
+// The same eye as a frame's check, over one element and what is inside it.
+export const auditElement = (page, i) => ask('/__api/audit', { page, i });
+// A picture of it: `element` alone, `context` with the frame around it and the element
+// boxed, `marked` for several at once, each with its number.
+export const shotOf = (page, body) => ask('/__api/shot', { page, ...body });
+export const shotRegion = (page, rect) => ask('/__api/shot/rect', { page, ...rect });
+export const shotStatesOf = (page, i) => ask('/__api/shot/states', { page, i });
+export const shotSizesOf = (page, find, widths) => ask('/__api/shot/sizes', { page, find, widths });
+// Remembering how an element looked, with the project's files as they were, and coming back.
+export const rememberLook = (page, i, label) => ask('/__api/remember', { page, i, label });
+export const compareLook = (page, id) => ask('/__api/compare', { page, id });
+export const undoLook = (page, id, files) => ask('/__api/undo', { page, id, files });
+export const redoLook = (page, id) => ask('/__api/redo', { page, id });
+export const getRemembered = page => json(`/__api/remembered?page=${encodeURIComponent(page)}`).then(r => r.items);
+// A picture made in the board, kept where the others are so it can be pasted the same way.
+export const savePicture = (blob, label) =>
+  fetch(`/__api/shot/save?label=${encodeURIComponent(label || 'picture')}`, { method: 'PUT', body: blob })
+    .then(r => r.json());
+export const pictureUrl = name => `/__api/shotfile?name=${encodeURIComponent(name)}`;

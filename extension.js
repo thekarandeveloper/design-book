@@ -30,6 +30,7 @@ const {
 } = require('./src/board-editor');
 const { ensureClaudeContext, askClaude } = require('./src/claude');
 const { ensureSkill, skillHome } = require('./src/skill');
+const { ensureAgents } = require('./src/agents');
 
 let log;
 let tree;
@@ -82,6 +83,7 @@ function activate(context) {
     cmd('showLog', () => log.show()),
     cmd('installSkill', async () => {
       ensureSkill({ force: true });
+      ensureAgents({ force: true });
       const open = await vscode.window.showInformationMessage(
         'The Claude skill is installed.', 'Show it'
       );
@@ -145,6 +147,7 @@ function activate(context) {
 
   // The half of this that lives outside the editor: the skill an agent reads.
   ensureSkill();
+  ensureAgents();
 
   setContext();
 }

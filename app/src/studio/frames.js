@@ -37,3 +37,11 @@ export const FRAME_GROUPS = [
     ['Square poster', 1500, 1500]
   ]]
 ];
+
+// Whether a frame of this size is a screen: something that scrolls, whose page may be as
+// tall as it likes. A preset from a group that grows is one; so is any other size no wider
+// than a phone, because nobody draws a post that narrow. A post, a thumbnail or a poster is
+// a fixed rectangle, and what runs past its edge is cropped on purpose.
+export const isScreenSize = (width, height) =>
+  FRAME_GROUPS.some(([, grow, list]) => grow && list.some(([, w, h]) => w === width && h === height))
+  || width <= 500;

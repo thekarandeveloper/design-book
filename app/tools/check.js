@@ -9,7 +9,7 @@
 import { findBrowser } from './export.js';
 
 // Everything below runs inside the page.
-const AUDIT = function audit(frame) {
+export const AUDIT = function audit(frame, scope) {
   const issues = [];
   const seen = new Set();
   const add = (kind, severity, what, el, detail) => {
@@ -83,7 +83,8 @@ const AUDIT = function audit(frame) {
     return r.width > 0 && r.height > 0;
   };
 
-  const all = [...document.body.querySelectorAll('*')];
+  // One element and what is inside it, or the whole page.
+  const all = scope ? [scope, ...scope.querySelectorAll('*')] : [...document.body.querySelectorAll('*')];
   for (const el of all) {
     if (!visible(el)) continue;
     const style = getComputedStyle(el);
@@ -135,23 +136,87 @@ const AUDIT = function audit(frame) {
     if (frame.touch && (el.tagName === 'A' || el.tagName === 'BUTTON') && r.height && r.height < 44) {
       add('hard to tap', 'warn', words(el) || describe(el), el, `${Math.round(r.height)}px tall, 44 is the floor`);
     }
+
+    // What is worth saying about a single element, and not worth saying about eighty.
+    if (scope) {
+      const tappable = el.tagName === 'A' || el.tagName === 'BUTTON' || el.tagName === 'INPUT' || el.tagName === 'SELECT'
+        || el.getAttribute('role') === 'button' || el.hasAttribute('onclick');
+      if (tappable && (r.width < 24 || r.height < 24) && r.width && r.height && !(frame.touch && r.height < 44)) {
+        add('too small to hit', 'warn', words(el) || describe(el), el, `${Math.round(r.width)} x ${Math.round(r.height)}px, 24 is the floor`);
+      }
+      if (el.tagName === 'IMG') {
+        if (!el.hasAttribute('alt')) add('picture has no alt text', 'warn', el.getAttribute('src') || describe(el), el, 'a screen reader says nothing for it');
+        if (el.complete && el.naturalWidth > 0 && r.width > el.naturalWidth * 1.15) {
+          add('picture is blurry', 'warn', el.getAttribute('src') || describe(el), el,
+              `drawn ${Math.round(r.width)}px wide, the file is ${el.naturalWidth}px`);
+        }
+      }
+      if (Math.round(r.right - frame.width) > 2 && r.width <= frame.width * 1.5) {
+        add('past the edge', 'bad', words(el) || describe(el), el, `${Math.round(r.right - frame.width)}px outside the frame`);
+      }
+      const parent = el.parentElement;
+      if (el !== scope && parent && getComputedStyle(parent).overflow !== 'visible') {
+        const p = parent.getBoundingClientRect();
+        if (r.right > p.right + 2 || r.bottom > p.bottom + 2 || r.left < p.left - 2 || r.top < p.top - 2) {
+          add('cut off by its parent', 'warn', words(el) || describe(el), el, `${describe(parent)} hides the part of it outside its box`);
+        }
+      }
+      if (own && size >= 12) {
+        const lines = Math.round(r.height / (parseFloat(style.lineHeight) || size * 1.2));
+        const chars = (el.textContent || '').length;
+        if (lines >= 1 && chars / Math.max(1, lines) > 95) {
+          add('lines too long to read', 'warn', words(el), el, `about ${Math.round(chars / lines)} characters a line, 45 to 90 reads well`);
+        }
+      }
+    }
   }
 
   // A year that has gone by, next to a copyright line.
   const year = new Date().getFullYear();
   const body = document.body.innerText || '';
-  const old = /(?:©|\(c\)|copyright)[^\n]{0,24}?((?:19|20)\d{2})/i.exec(body);
+  const old = scope ? null : /(?:©|\(c\)|copyright)[^\n]{0,24}?((?:19|20)\d{2})/i.exec(body);
   if (old && Number(old[1]) < year) {
     add('last year', 'warn', old[0].trim(), null, `it says ${old[1]}, this is ${year}`);
   }
 
-  // A screen that scrolls sideways is a mistake. A poster is cropped on purpose.
-  if (frame.grow) {
-    const wide = Math.round(document.documentElement.scrollWidth - frame.width);
-    if (wide > 2) add('scrolls sideways', 'bad', 'the page', null, `${wide}px wider than the frame`);
-  }
-
-  if (!frame.grow) {
+  // Wider than the frame is a mistake on a screen, on any device: it is a horizontal
+  // scrollbar for whoever is looking, or, when the page hides it, something cut off at the
+  // side that they will never know was there. Taller is what a screen is for, so nothing is
+  // said about it. A poster is the other way about: cropped on purpose, so what runs past
+  // its edge is a decision, and what runs past its bottom is the only thing worth saying.
+  if (!scope && frame.screen) {
+    const root = document.documentElement;
+    const limit = root.clientWidth;
+    const mode = getComputedStyle(root).overflowX !== 'visible'
+      ? getComputedStyle(root).overflowX
+      : getComputedStyle(document.body).overflowX;
+    const wide = Math.round(Math.max(root.scrollWidth, document.body.scrollWidth) - limit);
+    if (wide > 2) {
+      // What is wider. Anything whose right edge is past the frame, unless something
+      // around it clips it inside the frame; and of those, only the ones whose own parent
+      // is not past the edge too, because a wide box takes everything in it with it and the
+      // box is the thing to fix.
+      const out = new Map();
+      for (const el of all) {
+        if (getComputedStyle(el).position === 'fixed') continue;
+        const box = el.getBoundingClientRect();
+        if (box.width === 0 || box.right <= limit + 1) continue;
+        let held = false;
+        for (let up = el.parentElement; up && up !== document.body && up !== root; up = up.parentElement) {
+          if (getComputedStyle(up).overflowX !== 'visible' && up.getBoundingClientRect().right <= limit + 1) { held = true; break; }
+        }
+        if (!held) out.set(el, Math.round(box.right - limit));
+      }
+      const origins = [...out.entries()]
+        .filter(([el]) => !out.has(el.parentElement))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([el, by]) => `${describe(el)} by ${by}px`);
+      const hidden = mode === 'hidden' || mode === 'clip';
+      add(hidden ? 'cut off at the side' : 'scrolls sideways', hidden ? 'warn' : 'bad', 'the page', null,
+          `${wide}px wider than the frame${origins.length ? `: ${origins.join(', ')}` : ''}`);
+    }
+  } else if (!scope) {
     const tall = Math.round(document.documentElement.scrollHeight - frame.height);
     if (tall > 4) {
       add('longer than its frame', 'warn', 'the page', null,
@@ -159,7 +224,7 @@ const AUDIT = function audit(frame) {
     }
   }
 
-  if (body.trim().length < 3) add('nothing in it', 'warn', 'the frame', null, 'no words at all');
+  if (!scope && body.trim().length < 3) add('nothing in it', 'warn', 'the frame', null, 'no words at all');
 
   // The same fault in eight places is one fault. Said once, with what it happened to,
   // so the list is something a person can read and act on.
@@ -180,7 +245,7 @@ const AUDIT = function audit(frame) {
   return folded;
 };
 
-export async function check({ url, width, height, grow, touch }) {
+export async function check({ url, width, height, grow, touch, screen }) {
   const browser = findBrowser();
   if (!browser) throw new Error('No Chrome, Chromium, Brave or Edge on this machine to draw the page.');
 
@@ -195,7 +260,7 @@ export async function check({ url, width, height, grow, touch }) {
     await page.setViewport({ width: Math.round(width), height: Math.round(height), deviceScaleFactor: 1 });
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
     await page.evaluate(() => (document.fonts ? document.fonts.ready : null)).catch(() => {});
-    const issues = await page.evaluate(AUDIT, { width, height, grow: !!grow, touch: !!touch });
+    const issues = await page.evaluate(AUDIT, { width, height, grow: !!grow, touch: !!touch, screen: screen === undefined ? !!grow : !!screen });
     return issues;
   } finally {
     await app.close().catch(() => {});

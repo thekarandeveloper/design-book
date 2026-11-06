@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FRAME_GROUPS } from './frames.js';
 import { holdWheel, onEachFrame, wheelStep } from './navigate.js';
+import { SleeperContext, createSleeper } from './awake.js';
+import { usePick, PickLayer, PickPanel, PickDialogs } from './Pick.jsx';
+import { labelOf } from './pick.js';
 
 // The board: sections, zoom, pan, selection, frames you can move between sections and
 // resize.
@@ -34,11 +37,12 @@ const BAND_BAR = 24;
 export function Board({
   frames, bands = [], onResize, onFit, onReload, onDrop,
   onAddSection, onRenameSection, onRemoveSection,
-  onSelect, onRename, onDelete, onCheck, onCopy, focus,
+  onSelect, onRename, onDelete, onCheck, onCopy, onSay, focus,
   storageKey, empty
 }) {
   const boardRef = useRef(null);
   const worldRef = useRef(null);
+  const pickWorldRef = useRef(null);
   const [view, setView] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem('st-view:' + storageKey) || 'null');
@@ -55,13 +59,27 @@ export function Board({
   // board moves, only where the whole layer is drawn, so the move is written straight
   // onto that layer and React is told once a frame, for the labels and the readout.
   const live = useRef(view);
+  // Which frames run, which are a picture, which are nothing: worked out from where the
+  // board is looking, every time it moves, and handed on only where it changed.
+  const sleeper = useRef(null);
+  if (!sleeper.current) sleeper.current = createSleeper();
   const paint = useCallback(() => {
     const at = live.current;
     const el = worldRef.current;
     if (el) {
       el.style.transform = `translate3d(${at.x}px, ${at.y}px, 0) scale(${at.k})`;
       el.style.setProperty('--k', String(Math.max(0.2, Math.min(1, at.k))));
+      // The real zoom, for what the board draws over a frame and wants to stay one
+      // pixel thick however far in or out it is.
+      el.style.setProperty('--zoom', String(at.k));
     }
+    // What is drawn over the chosen frame moves exactly as the world does.
+    const over = pickWorldRef.current;
+    if (over) {
+      over.style.transform = `translate3d(${at.x}px, ${at.y}px, 0) scale(${at.k})`;
+      over.style.setProperty('--zoom', String(at.k));
+    }
+    sleeper.current.update({ view: at });
     setView(at);
   }, []);
   const beat = useRef(null);
@@ -83,7 +101,10 @@ export function Board({
   // given its place when it appears, and the beat stopped when it goes.
   useEffect(() => {
     paint();
-    return () => beat.current && beat.current.stop();
+    return () => {
+      if (beat.current) beat.current.stop();
+      if (sleeper.current) sleeper.current.stop();
+    };
   }, [paint]);
   const [selected, setSelected] = useState('');
   const [drag, setDrag] = useState(null);
@@ -114,6 +135,50 @@ export function Board({
   }, []);
 
   const frame = frames.find(f => f.id === selected) || null;
+
+  // What the wheel handler needs to know without being rebuilt for it.
+  const framesRef = useRef(frames);
+  framesRef.current = frames;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  // Frames of another origin whose page has been scrolled, so where it is now is unknown.
+  const [scrolled, setScrolled] = useState(() => new Set());
+  const nonces = useRef({});
+  useEffect(() => {
+    // A frame that loaded its page again is at the top again.
+    let changed = false;
+    const next = new Set(scrolled);
+    for (const f of frames) {
+      if (nonces.current[f.id] !== undefined && nonces.current[f.id] !== f.nonce && next.delete(f.id)) changed = true;
+      nonces.current[f.id] = f.nonce;
+    }
+    if (changed) setScrolled(next);
+  }, [frames]);
+
+  // Choosing elements inside the frame that is chosen: its map, what is under the pointer,
+  // what is picked, and what can be done with it.
+  const pick = usePick({
+    frame,
+    inside: !!frame && inside === frame.id,
+    scrolled: !!frame && scrolled.has(frame.id),
+    say: onSay || (() => {}),
+    onReload,
+    onFit
+  });
+  const pickRef = useRef(pick);
+  pickRef.current = pick;
+
+  // What the sleeper decides from: where every frame is and how big, how big the window
+  // is, and the frame that is chosen, which stays awake wherever it ends up.
+  const shape = frames.map(f => `${f.id}:${f.x},${f.y},${f.width},${f.height},${f.running ? 1 : 0}`).join('|');
+  useEffect(() => {
+    sleeper.current.update({
+      frames: frames.map(f => ({ id: f.id, x: f.x, y: f.y, width: f.width, height: f.height, running: !!f.running })),
+      size,
+      keep: new Set(selected ? [selected] : []),
+      view: live.current
+    });
+  }, [shape, size, selected]);
 
   // Selecting is the board's own business, but what is selected decides where the next
   // frame goes, so it is said out loud.
@@ -278,7 +343,50 @@ export function Board({
     };
     const wheelBeat = onEachFrame(apply);
 
+    // The wheel, over the frame you have chosen, scrolls the page inside it.
+    //
+    // A page that has somewhere to scroll takes the wheel once it is chosen, which is what
+    // choosing it is for; a page that has nowhere to go leaves the wheel to the board, or
+    // the board would stop moving whenever the pointer crossed it. A pinch is always the
+    // board's: it is a zoom, and zooming is never a scroll.
+    //
+    // A page on this origin is scrolled directly. A page on another, which is any live
+    // route, cannot be reached from here at all, so for a moment the frame is given the
+    // pointer and the wheel goes to it as it would to any page. Where that page is
+    // afterwards is not something the board can know, and it says so.
+    let handBack = 0;
+    const scrollInside = ev => {
+      if (ev.ctrlKey || ev.metaKey) return false;
+      const node = ev.target.closest && ev.target.closest('.st-frame');
+      if (!node || node.getAttribute('data-id') !== selectedRef.current) return false;
+      const f = framesRef.current.find(x => x.id === selectedRef.current);
+      // The frame itself, and the layer drawn over it, are two elements: the page is in
+      // one and the pointer is on the other.
+      const real = el.querySelector(`.st-world > .st-frame[data-id="${CSS.escape(selectedRef.current)}"]`);
+      const over = el.querySelector('.st-pick');
+      const iframe = f && f.scrolls && real ? real.querySelector('iframe') : null;
+      if (!iframe) return false;
+      ev.preventDefault();
+      const unit = ev.deltaMode === 1 ? 40 : ev.deltaMode === 2 ? 800 : 1;
+      try {
+        const view = iframe.contentWindow;
+        void view.document;           // throws when the page is another origin
+        view.scrollBy({ left: ev.deltaX * unit, top: ev.deltaY * unit, behavior: 'instant' });
+        return true;
+      } catch (_) {}
+      real.classList.add('is-scrolling');
+      if (over) over.classList.add('is-scrolling');
+      clearTimeout(handBack);
+      handBack = setTimeout(() => {
+        real.classList.remove('is-scrolling');
+        if (over) over.classList.remove('is-scrolling');
+      }, 500);
+      setScrolled(was => (was.has(f.id) ? was : new Set(was).add(f.id)));
+      return true;
+    };
+
     const onWheel = ev => {
+      if (scrollInside(ev)) return;
       ev.preventDefault();
       const step = wheelStep(ev, held);
       if (step.kind === 'zoom') {
@@ -311,7 +419,11 @@ export function Board({
       ev.preventDefault();
       ev.stopPropagation();
       select(f.id);
-      setMenu({ frame: f, x: ev.clientX, y: ev.clientY });
+      // Over the layer drawn on the chosen frame, the menu is about the element under
+      // the pointer, which the right button also chooses.
+      const layer = ev.target.closest && ev.target.closest('.st-pick');
+      const element = layer && pickRef.current.live ? pickRef.current.rightDown(layer, ev) : null;
+      setMenu({ frame: f, x: ev.clientX, y: ev.clientY, element });
     };
     const onMenu = ev => {
       if (!frameUnder(ev.target)) return;
@@ -325,6 +437,7 @@ export function Board({
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => {
       wheelBeat.stop();
+      clearTimeout(handBack);
       el.removeEventListener('pointerdown', onRightDown, true);
       el.removeEventListener('mousedown', onRightDown, true);
       el.removeEventListener('contextmenu', onMenu, true);
@@ -335,6 +448,9 @@ export function Board({
   useEffect(() => {
     const onKey = ev => {
       if (ev.target.matches('input, textarea, [contenteditable]')) return;
+      // What is chosen inside the frame comes first: Escape lets go of that before it lets
+      // go of the frame, and the arrows walk the tree.
+      if (pickRef.current.key(ev)) return;
       if (ev.key === 'Escape') {
         setMenu(null);
         // Out of the frame first, because that is what Escape means while you are in one.
@@ -487,7 +603,7 @@ export function Board({
               width: f.width,
               transform: isDragging ? `translate(${drag.dx}px, ${drag.dy}px)` : undefined
             }}
-            onPointerDown={() => { select(f.id); centreOn(f.id); }}
+            onPointerDown={() => { if (f.id !== selected) { select(f.id); centreOn(f.id); } }}
             onDoubleClick={() => setInside(f.id)}
             onContextMenu={ev => {
               ev.preventDefault();
@@ -511,6 +627,7 @@ export function Board({
   ), [frames, bands, drag, selected, inside, select, centreOn, startResize]);
 
   return (
+    <SleeperContext.Provider value={sleeper.current}>
     <div
       ref={boardRef}
       className={'st-board' + (panning ? ' is-panning' : '') + (drag ? ' is-dragging' : '')}
@@ -522,6 +639,15 @@ export function Board({
           cover the thing it names. */}
       <div ref={worldRef} className={'st-world' + (settling ? ' is-settling' : '')}>
         {worldInside}
+      </div>
+
+      {/* What is drawn over the chosen frame: its elements, outlined as the pointer
+          crosses them. A layer of its own that moves as the world does, so choosing an
+          element redraws that layer and not every frame on the board. */}
+      <div ref={pickWorldRef} className="st-world st-world--pick">
+        {frame && pick.live && !drag ? (
+          <PickLayer pick={pick} frame={frame} onEnter={() => setInside(frame.id)} />
+        ) : null}
       </div>
 
       {/* Labels live over the board, not in it.
@@ -664,6 +790,17 @@ export function Board({
                   {f.check.issues.length}
                 </span>
               ) : null}
+              {/* A screen scrolls down, and that is what it is for. One that scrolls
+                  across has something wider than the screen, which is a mistake on any
+                  device, so it says so where the frame's name is. */}
+              {f.sideways ? (
+                <span
+                  className="st-found st-wide"
+                  title={`The page is ${f.sideways.by}px wider than this frame${f.sideways.clipped ? ', and hides it instead of scrolling' : ', so there is a horizontal scrollbar'}. Check this frame to see what is wider.`}
+                >
+                  {f.sideways.clipped ? 'Cut off at the side' : 'Scrolls sideways'}
+                </span>
+              ) : null}
               {f.note ? <span className="st-said">{f.note}</span> : null}
             </div>
           );
@@ -685,8 +822,12 @@ export function Board({
         />
       ) : null}
 
+      <PickPanel pick={pick} />
+      <PickDialogs pick={pick} />
+
       {menu ? (
         <Menu
+          pick={pick}
           at={menu}
           onClose={() => setMenu(null)}
           onReload={onReload}
@@ -705,6 +846,15 @@ export function Board({
         </div>
         <button className="st-btn" title="Fit everything (1)" onClick={() => fit()}>Fit</button>
         <button className="st-btn" title="100% (0)" onClick={() => move(v => ({ ...v, k: 1 }))}>100%</button>
+        {pick.live ? (
+          <button
+            className={'st-btn' + (pick.snip ? ' st-btn--go' : '')}
+            title="Snip a region of this frame, to paste (S)"
+            onClick={() => pick.setSnip(on => !on)}
+          >
+            Snip
+          </button>
+        ) : null}
         {onAddSection ? (
           <button
             className="st-btn"
@@ -716,6 +866,7 @@ export function Board({
         ) : null}
       </div>
     </div>
+    </SleeperContext.Provider>
   );
 }
 
@@ -739,7 +890,7 @@ function MoreIcon() {
   );
 }
 
-function Menu({ at, onClose, onReload, onCheck, onFit, onRename, onDelete }) {
+function Menu({ pick, at, onClose, onReload, onCheck, onFit, onRename, onDelete }) {
   const { frame, x, y } = at;
   const ref = useRef(null);
   const [place, setPlace] = useState({ left: x, top: y });
@@ -762,7 +913,7 @@ function Menu({ at, onClose, onReload, onCheck, onFit, onRename, onDelete }) {
     return () => window.removeEventListener('pointerdown', away, true);
   }, [onClose]);
 
-  const items = [
+  const frameItems = [
     ...(frame.actions || []).map(action => ({ label: action.label, title: action.title, run: action.onClick })),
     onReload ? { label: 'Reload', title: 'Load this page again', run: () => onReload(frame.id) } : null,
     onFit ? { label: 'Show full content', title: 'As tall as the whole page, however long it runs', run: () => onFit(frame) } : null,
@@ -770,6 +921,16 @@ function Menu({ at, onClose, onReload, onCheck, onFit, onRename, onDelete }) {
     frame.canRename && onRename ? { label: 'Rename', title: 'Rename this frame and its file', run: () => onRename(frame.id) } : null,
     frame.canDelete && onDelete ? { label: 'Delete frame', title: 'Its file goes to .designbook/.trash', run: () => onDelete(frame.id), gone: true } : null
   ].filter(Boolean);
+
+  // Over an element: what can be done with it, and under that the two things about the
+  // frame that are wanted most. Over nothing: the frame's own menu.
+  const items = at.element
+    ? [
+        ...pick.menuItems(at.element),
+        { group: 'Frame' },
+        ...frameItems.filter(i => i.label === 'Reload' || i.label === 'Show full content')
+      ]
+    : frameItems;
 
   return (
     <div
@@ -781,8 +942,10 @@ function Menu({ at, onClose, onReload, onCheck, onFit, onRename, onDelete }) {
       // real press shut the menu before its click could land on the item.
       onPointerDown={ev => ev.stopPropagation()}
     >
-      <p className="st-context-what">{frame.title}</p>
-      {items.map(item => (
+      <p className="st-context-what">{at.element ? labelOf(at.element.el) : frame.title}</p>
+      {items.map((item, n) => item.group ? (
+        <p key={'g' + n} className="st-context-group">{item.group}</p>
+      ) : (
         <button
           key={item.label}
           className={'st-context-item' + (item.gone ? ' is-gone' : '')}

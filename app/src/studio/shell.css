@@ -1567,3 +1567,241 @@ html, body, #root { height: 100%; margin: 0; }
 /* The one button here that takes something away. It reads like every other button
    until the pointer is on it, and then it says what it is about to do. */
 .st-btn--gone:hover { background: var(--st-danger); border-color: var(--st-danger); color: #fff; }
+
+/* ── pictures of frames ──────────────────────────────────────────────────
+   What a frame shows while it is too small to run, or has not finished loading. At the
+   width of the frame and as tall as it is, so a page forty thousand pixels long is a
+   picture of its top, in the right place and at the right size, and the rest is the
+   frame's own colour. */
+.st-screen > img.st-poster {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: auto;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.st-screen > img.st-poster.is-ready { opacity: 1; }
+
+/* A page of another origin cannot be scrolled from the board, so for a moment after a
+   wheel the frame is handed the pointer and the page takes it. */
+.st-frame.is-scrolling .st-screen { pointer-events: auto; }
+.st-found.st-wide { margin-left: 4px; }
+
+/* ── choosing elements inside a frame ────────────────────────────────────
+   A layer over the chosen frame, in its own world that moves as the board does. It takes
+   the pointer; everything drawn on it is for looking at, and nothing but the layer itself
+   is clickable. Lines are a pixel thick on the screen at any zoom: --zoom is the real one. */
+.st-world--pick { pointer-events: none; z-index: 3; }
+.st-pick { position: absolute; pointer-events: auto; cursor: default; }
+.st-pick.is-snipping { cursor: crosshair; }
+.st-pick.is-scrolling { pointer-events: none; }
+
+.st-pick-box {
+  position: absolute;
+  box-sizing: border-box;
+  pointer-events: none;
+  border: calc(1.5px / var(--zoom, 1)) solid var(--st-accent);
+  background: color-mix(in srgb, var(--st-accent) 9%, transparent);
+}
+.st-pick-box.is-chosen {
+  border-width: calc(2px / var(--zoom, 1));
+  background: color-mix(in srgb, var(--st-accent) 14%, transparent);
+}
+.st-pick-box.is-region, .st-pick-box.is-snip { border-style: dashed; }
+.st-pick-box.is-snip { background: color-mix(in srgb, var(--st-accent) 12%, transparent); }
+
+/* Its name, held above its top left corner and the same size on screen at any zoom. */
+.st-pick-tag {
+  position: absolute;
+  left: calc(-1px / var(--zoom, 1));
+  bottom: 100%;
+  white-space: nowrap;
+  transform: scale(calc(1 / var(--zoom, 1)));
+  transform-origin: left bottom;
+  padding: 2px 7px 3px;
+  border-radius: 4px 4px 0 0;
+  background: var(--st-accent);
+  color: #fff;
+  font: 600 11px/1.3 -apple-system, system-ui, sans-serif;
+}
+.st-pick-tag i { margin-left: 5px; font-style: normal; font-weight: 500; opacity: 0.75; font-variant-numeric: tabular-nums; }
+.st-pick-tag.is-chosen { background: color-mix(in srgb, var(--st-accent) 88%, #000); }
+
+.st-pick-n {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%) scale(calc(1 / var(--zoom, 1)));
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--st-accent);
+  color: #fff;
+  font: 700 11px/18px -apple-system, system-ui, sans-serif;
+  text-align: center;
+}
+
+/* How far apart two things are, drawn across the gap. */
+.st-pick-gap { position: absolute; pointer-events: none; background: #ff3b30; }
+.st-pick-gap.is-h { height: calc(1px / var(--zoom, 1)); }
+.st-pick-gap.is-v { width: calc(1px / var(--zoom, 1)); }
+.st-pick-gap span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(calc(1 / var(--zoom, 1)));
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #ff3b30;
+  color: #fff;
+  font: 600 10px/1.4 -apple-system, system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+/* What the board has to say about the frame itself: still reading it, could not, or it was
+   scrolled and nobody can tell where things are now. Held at the top and not scaled. */
+.st-pick-chip {
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%) scale(calc(1 / var(--zoom, 1)));
+  transform-origin: top center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+  padding: 6px 10px;
+  border: 1px solid var(--st-line);
+  border-radius: 999px;
+  background: var(--st-veil);
+  color: var(--st-ink);
+  font: 12px/1.3 -apple-system, system-ui, sans-serif;
+  box-shadow: 0 6px 20px var(--st-shade);
+  pointer-events: auto;
+}
+.st-pick-chip button {
+  height: 22px; padding: 0 9px; border: 1px solid var(--st-edge); border-radius: 999px;
+  background: var(--st-raise); color: var(--st-ink); font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.st-pick-chip button:hover { background: var(--st-hover); }
+
+/* The panel for what is chosen, beside the frame's own. */
+.st-pickpanel {
+  position: absolute;
+  right: 236px;
+  top: 12px;
+  width: 288px;
+  max-height: calc(100% - 90px);
+  overflow: auto;
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--st-line);
+  border-radius: 10px;
+  background: var(--st-veil);
+  backdrop-filter: blur(8px);
+  z-index: 5;
+  font-size: 12px;
+}
+.st-pickpanel header { display: flex; align-items: center; gap: 8px; }
+.st-pickpanel header b { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-pickpanel .st-x { margin-left: auto; border: 0; background: transparent; color: var(--st-muted); font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px; }
+.st-pickpanel-thumb {
+  display: grid; place-items: center; min-height: 56px; max-height: 176px; overflow: hidden;
+  border-radius: 8px; background: var(--st-sunk); color: var(--st-muted); font-size: 11px;
+}
+.st-pickpanel-thumb img { display: block; max-width: 100%; max-height: 176px; object-fit: contain; }
+.st-pickpanel-source {
+  display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 5px 8px; text-align: left;
+  border: 1px solid var(--st-line); border-radius: 6px; background: var(--st-raise); color: var(--st-ink);
+  font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.st-pickpanel-source:hover { background: var(--st-hover); }
+.st-pickpanel-source em { margin-left: auto; font-style: normal; font-family: -apple-system, system-ui, sans-serif; color: var(--st-muted); }
+.st-pickpanel-facts { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 11px; }
+.st-pickpanel-facts dt { color: var(--st-muted); }
+.st-pickpanel-facts dd { margin: 0; color: var(--st-ink); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
+.st-sw { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 3px; vertical-align: -1px; box-shadow: 0 0 0 1px var(--st-edge); }
+.st-pickpanel-issues { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 11px; color: var(--st-muted); }
+.st-pickpanel-issues li b { color: var(--st-ink); font-weight: 600; }
+.st-pickpanel-issues li.is-bad b { color: var(--st-warn); }
+.st-pickpanel-templates { display: flex; flex-wrap: wrap; gap: 4px; }
+.st-pickpanel-templates button {
+  height: 22px; padding: 0 8px; border: 1px solid var(--st-line); border-radius: 999px;
+  background: var(--st-raise); color: var(--st-ink); font: inherit; font-size: 11px; cursor: pointer;
+}
+.st-pickpanel-templates button:hover { background: var(--st-hover); }
+.st-pickpanel-note {
+  width: 100%; box-sizing: border-box; padding: 6px 8px; resize: vertical; min-height: 44px;
+  border: 1px solid var(--st-line); border-radius: 6px; background: var(--st-field); color: var(--st-ink);
+  font: inherit; font-size: 12px;
+}
+.st-pickpanel-ref { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 6px; background: var(--st-sunk); }
+.st-pickpanel-ref img { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; }
+.st-pickpanel-ref span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--st-muted); font-size: 11px; }
+.st-pickpanel-model {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px;
+  border-radius: 6px; background: var(--st-sunk); color: var(--st-muted); font-size: 11px;
+}
+.st-pickpanel-model b { color: var(--st-ink); font-weight: 600; }
+.st-pickpanel-model button {
+  height: 20px; padding: 0 7px; border: 1px solid var(--st-line); border-radius: 5px;
+  background: var(--st-raise); color: var(--st-ink); font: 10px ui-monospace, Menlo, monospace; cursor: pointer;
+}
+.st-pickpanel .st-row { display: flex; gap: 6px; }
+.st-pickpanel .st-row .st-btn { flex: 1; }
+.st-pickpanel-more { border: 0; background: transparent; color: var(--st-muted); font: inherit; font-size: 11px; cursor: pointer; text-align: left; padding: 0; }
+.st-pickpanel-more:hover { color: var(--st-ink); }
+.st-pickpanel-extra { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.st-pickpanel .st-note-line { margin: 0; font-size: 11px; color: var(--st-muted); }
+
+.st-context-group {
+  margin: 6px 8px 2px; color: var(--st-faint); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+
+/* The pictures, shown big. */
+.st-pickdialog {
+  width: min(760px, 94vw);
+  max-height: 92vh;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--st-line);
+  border-radius: 14px;
+  background: var(--st-panel);
+  color: var(--st-ink);
+  box-shadow: 0 40px 90px var(--st-shade);
+}
+.st-pickdialog.is-wide { width: min(1120px, 94vw); }
+.st-pickdialog header { display: flex; align-items: center; gap: 10px; }
+.st-pickdialog header b { font-size: 14px; font-weight: 600; }
+.st-pickdialog footer { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.st-pickdialog footer .st-note-line { margin: 0 auto 0 0; }
+.st-pickdialog .st-note-line { margin: 0; font-size: 12px; color: var(--st-muted); }
+.st-pickdialog-art { overflow: auto; border-radius: 8px; background: var(--st-sunk); padding: 10px; display: grid; place-items: center; }
+.st-pickdialog-art img { display: block; max-width: 100%; max-height: 64vh; }
+.st-pickdialog-art.is-draw canvas { display: block; max-width: 100%; max-height: 62vh; cursor: crosshair; touch-action: none; }
+.st-annotate-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.st-annotate-sw { display: inline-flex; gap: 5px; margin: 0 6px; }
+.st-annotate-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--st-edge); cursor: pointer; padding: 0; }
+.st-annotate-dot.is-on { border-color: var(--st-panel); box-shadow: 0 0 0 2px var(--st-accent); }
+.st-annotate-input {
+  position: fixed; z-index: 70; transform: translate(-4px, -4px); min-width: 160px; padding: 4px 8px;
+  border: 1px solid var(--st-accent); border-radius: 6px; background: #fff; font: 700 16px -apple-system, system-ui, sans-serif;
+}
+.st-compare-files ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 3px; font: 12px ui-monospace, Menlo, monospace; }
+.st-compare-files label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.st-refpick { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.st-refpick button {
+  display: grid; gap: 4px; padding: 6px; border: 1px solid var(--st-line); border-radius: 8px;
+  background: var(--st-raise); color: var(--st-muted); font: inherit; font-size: 11px; cursor: pointer; text-align: left;
+}
+.st-refpick button:hover { background: var(--st-hover); }
+.st-refpick img { width: 100%; height: 90px; object-fit: cover; border-radius: 4px; }

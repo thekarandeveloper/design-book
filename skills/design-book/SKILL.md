@@ -251,6 +251,13 @@ curl -s -X POST $B/export       -H 'Content-Type: application/json' -d '{"page":
 curl -s -X POST $B/setup        -H 'Content-Type: application/json' -d '{}'
 ```
 
+Reading one element of a frame, for when a prompt did not carry what you need:
+`POST $B/scan {"page":"<frame id>"}` is every element on screen with its box and its words;
+`POST $B/element {"page":"<id>","i":<index in that scan>}` is one element's styles, tokens
+and the file and line it was written on; `POST $B/shot {"page":"<id>","i":<index>}` is a
+picture of it (`"mode":"context"` for the frame around it). Pictures are under
+`~/Library/Caches/design-book/`, outside the repo, and are cleared after a day.
+
 `frame/move` puts one frame somewhere else, in a single call: `section` is the section it
 goes to, by id or by name, and a name nobody has used yet makes that section. Where it
 lands inside the section is `after`, the frame it should sit behind, or `to`, a place
@@ -263,6 +270,43 @@ the files below are the way, and everything still works.
 Making a frame, renaming one, throwing one away and asking for a check are all one call:
 do not write the page file by hand to make a frame, and do not read `studio.json` to
 learn what a frame is called.
+
+## A prompt that comes from the board
+
+A person can choose an element on a frame and copy what they chose as a prompt. It looks
+like this, and every line is there so you do not have to look for anything:
+
+```
+Design Book: Home [live:/] (1440 x 900)
+Frame file: /path/to/the/frame
+Element: Link "Work"
+  where: #nav > div > span:nth-of-type(2) > a:nth-of-type(1)
+  classes: nav-link-item water-surface
+  code: components/home/HomeNav.tsx:85 (HomeNav)
+  size: 69 x 37 at 699, 52
+  looks: type Instrument Sans 14.5px/23.2px 500, color #0000007a, radius 99px
+  wrong: cannot be read, 3.7:1 against what is behind it, 4.5:1 is the floor
+Screenshot: /path/to/the/picture.png
+
+Make the text darker.
+Small change: give it to the design-edit agent.
+```
+
+`code:` is the file and the line the element is written on. Open that file at that line and
+change it there; do not search for the element, do not read the rest of the project. A
+`color #111 (--foreground)` names a token: use the token. `wrong:` is what the board's own
+check found. `Screenshot:` is a picture of the element: read it only if the words are not
+enough, because a picture costs more than a line of text.
+
+The last line says who should do it, because the size of the change decides what it needs:
+
+- `design-edit` (the smallest model) for one value in one file: a colour, spacing, a radius,
+  a line of text. It opens the file at the line and makes one edit.
+- `design-build` (the middle one) for a change that spans a component: responsive layout,
+  restyling, matching a reference. It reads the file and what it imports.
+- No line: a change that rebuilds how something is laid out. That stays with you.
+
+Both are in `~/.claude/agents/`, installed with this skill, and hand back two lines.
 
 ## Say which frame you are working on
 

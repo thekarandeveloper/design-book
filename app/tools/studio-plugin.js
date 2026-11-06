@@ -21,6 +21,13 @@ import { readPalette } from './palette.js';
 import { createBoard } from './board.js';
 import { runSetup } from './setup.js';
 import { measureHeight, stopMeasuring } from './measure.js';
+import { ensurePoster, readPoster, forgetPoster, cacheRoot } from './posters.js';
+import {
+  session as inspectSession, forgetSessions, scan as inspectScan, detail as inspectDetail,
+  shotElement, shotRect, shotStates, shotSizes, shotAgain, sheetOf, auditElement, keepPicture
+} from './inspect.js';
+import { snapshot as gitSnapshot, since as gitSince, restore as gitRestore } from './remember.js';
+import { isScreenSize } from '../src/studio/frames.js';
 
 const JSONH = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
 
@@ -61,6 +68,30 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
   let live = null;
   let servePort = 0;  // what this canvas server ended up listening on
   const readyCache = new Map(); // url -> the last answer, for a few seconds
+
+  // Is this page really being served, rather than an error page about the server?
+  //
+  // A page that answered once answers again: asking costs a full render on the dev server,
+  // and the board asks for every frame it can see. A page that did not is asked again
+  // soon, because it is probably still starting up.
+  async function served(url) {
+    const seen = readyCache.get(url);
+    const age = seen ? Date.now() - seen.at : Infinity;
+    if (seen && age < (seen.value.ok ? 600000 : 2000)) return { ...seen.value, cached: true };
+
+    let value;
+    try {
+      const res = await fetch(url, { headers: { Accept: 'text/html' }, signal: AbortSignal.timeout(45000) });
+      // The frame is loading the same page at the same time; this one only needs to know
+      // whether it answered, so its body is thrown away unread.
+      try { await res.body?.cancel(); } catch (_) {}
+      value = { ok: res.ok, status: res.status, why: res.ok ? '' : `the page answered ${res.status}` };
+    } catch (err) {
+      value = { ok: false, status: 0, why: err.name === 'TimeoutError' ? 'still rendering' : 'nothing is answering' };
+    }
+    readyCache.set(url, { at: Date.now(), value });
+    return value;
+  }
   function liveConfig() {
     const cfg = config().live;
     if (!cfg || !cfg.command) return null;
@@ -382,8 +413,12 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
         width: page.frame.width,
         height: page.frame.height,
         grow: !page.sized,
+        // A screen scrolls, so only what is wider than it is a fault. One whose height was
+        // chosen from the phone and desktop sizes is still a screen: choosing the size
+        // does not turn it into a poster.
+        screen: !page.sized || isScreenSize(page.frame.width, page.frame.height),
         // Tap targets are a screen's problem. A poster has no taps in it.
-        touch: !page.sized && page.frame.width <= 500
+        touch: (!page.sized || isScreenSize(page.frame.width, page.frame.height)) && page.frame.width <= 500
       });
     } catch (err) {
       failed = err.message;
@@ -1055,30 +1090,196 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
               ? found.url
               : `http://${req.headers.host || 'localhost:' + servePort}${found.url}`;
 
-            // A page that answered once answers again: asking costs a full render on the
-            // dev server, and the board asks for every frame it can see. A page that did
-            // not is asked again soon, because it is probably still starting up.
-            const seen = readyCache.get(url);
-            const age = seen ? Date.now() - seen.at : Infinity;
-            if (seen && age < (seen.value.ok ? 600000 : 2000)) {
-              return send({ ...seen.value, cached: true });
-            }
+            return send(await served(url));
+          }
 
-            let value;
+
+          // ── reading a frame, one element at a time ────────────────────────────
+          //
+          // The board cannot look inside a frame running a project's own dev server, so the
+          // headless browser opens the same address at the same width and reads that. A
+          // session keeps one frame open for a couple of minutes, so asking about a second
+          // element does not draw the page again. See inspect.js.
+          if (/^\/(scan|element|audit|shot|remember|compare|undo|redo)/.test(route) && req.method === 'POST') {
+            const asked = await body();
+            const found = listPages().find(p => p.id === (asked.page || ''));
+            const gone = route === '/compare' || route === '/undo' || route === '/redo';
+            if (!gone && (!found || !found.url)) return send({ error: 'this frame has no page to read' }, 404);
+            const shots = path.join(cacheRoot(studioRoot), 'shots');
+            const toUrl = f => (f.url.startsWith('http') ? f.url : `http://${req.headers.host || 'localhost:' + servePort}${f.url}`);
+            const open = fresh => {
+              const key = `${found.id}|${found.frame.width}x${found.frame.height}`;
+              if (fresh) forgetSessions(key);
+              return inspectSession({ key, url: toUrl(found), width: found.frame.width, height: found.frame.height });
+            };
+            const screen = found && (!found.sized || isScreenSize(found.frame.width, found.frame.height));
+            // A frame that was reloaded, or taken away, closes the page that was open on it
+            // while a question was still being asked of it. The question is asked again, once,
+            // of a page that is open.
+            const retry = async job => {
+              try { return await job(); } catch (err) {
+                if (!found || !/detached|closed|Session|Target|Protocol/i.test(String(err.message))) throw err;
+                forgetSessions(`${found.id}|`);
+                return job();
+              }
+            };
             try {
-              const res = await fetch(url, {
-                headers: { Accept: 'text/html' },
-                signal: AbortSignal.timeout(45000)
-              });
-              // The frame is loading the same page at the same time; this one only needs
-              // to know whether it answered, so its body is thrown away unread.
-              try { await res.body?.cancel(); } catch (_) {}
-              value = { ok: res.ok, status: res.status, why: res.ok ? '' : `the page answered ${res.status}` };
+              if (route === '/scan') {
+                return send({ ok: true, ...(await retry(async () => inspectScan(await open(asked.fresh)))) });
+              }
+              if (route === '/element') {
+                return send(await retry(async () => inspectDetail(await open(), Number(asked.i), { root: projectRoot(), studioRoot })));
+              }
+              if (route === '/audit') {
+                return send(await retry(async () => auditElement(await open(), Number(asked.i), { screen, touch: screen && found.frame.width <= 500 })));
+              }
+              if (route === '/shot') {
+                const made = await retry(async () => shotElement(await open(), {
+                  i: Number(asked.i), mode: asked.mode, pad: Number(asked.pad) || 8, dir: shots,
+                  marks: Array.isArray(asked.marks) ? asked.marks.map(m => ({ i: Number(m.i), n: Number(m.n) || 0 })) : [],
+                  label: asked.label || found.title
+                }));
+                return send(made.stale ? { stale: true } : { ok: true, ...made });
+              }
+              if (route === '/shot/rect') {
+                return send({ ok: true, ...(await retry(async () => shotRect(await open(), { x: Number(asked.x), y: Number(asked.y), w: Number(asked.w), h: Number(asked.h), dir: shots, label: asked.label || found.title }))) });
+              }
+              if (route === '/shot/states') {
+                const made = await retry(async () => shotStates(await open(), { i: Number(asked.i), dir: shots, label: asked.label || found.title }));
+                return send(made.stale ? { stale: true } : { ok: true, ...made });
+              }
+              if (route === '/shot/sizes') {
+                const widths = (Array.isArray(asked.widths) && asked.widths.length ? asked.widths : [390, 768, 1440])
+                  .map(Number).filter(n => n >= 200 && n <= 4000).slice(0, 6);
+                const made = await shotSizes({ url: toUrl(found), widths, find: asked.find || {}, height: found.frame.height, dir: shots, label: asked.label || found.title });
+                return send(made.none ? { none: true, missing: made.missing } : { ok: true, ...made });
+              }
+
+              // Remembering how an element looked, and the files as they were.
+              const remembered = path.join(cacheRoot(studioRoot), 'remembered');
+              const itemFile = id => path.join(remembered, String(id).replace(/[^\w-]/g, '') + '.json');
+              const readItem = id => { try { return JSON.parse(fs.readFileSync(itemFile(id), 'utf8')); } catch (_) { return null; } };
+              const writeItem = item => { fs.mkdirSync(remembered, { recursive: true }); fs.writeFileSync(itemFile(item.id), JSON.stringify(item)); };
+
+              if (route === '/remember') {
+                const live = await retry(async () => open());
+                const d = await inspectDetail(live, Number(asked.i), { root: projectRoot(), studioRoot });
+                if (d.stale) return send({ stale: true });
+                const shot = await shotElement(live, { i: Number(asked.i), mode: 'element', dir: shots, label: 'before' });
+                const snap = await gitSnapshot(projectRoot());
+                const item = {
+                  id: Date.now().toString(36), page: found.id, label: asked.label || d.tag, at: Date.now(),
+                  frame: { width: found.frame.width, height: found.frame.height },
+                  find: { path: d.path, selector: d.selector, text: (d.text || '').slice(0, 60), tag: d.tag },
+                  shot: { name: shot.name, file: shot.file }, git: snap, source: d.source
+                };
+                writeItem(item);
+                return send({ ok: true, id: item.id, git: !!snap });
+              }
+
+              const item = readItem(asked.id);
+              if (!item) return send({ error: 'nothing remembered under that name' }, 404);
+              const there = listPages().find(p => p.id === item.page);
+
+              if (route === '/compare') {
+                if (!there || !there.url) return send({ error: 'that frame is gone' }, 404);
+                const now = await shotAgain({ url: toUrl(there), width: item.frame.width, height: item.frame.height, find: item.find });
+                const before = fs.readFileSync(item.shot.file);
+                const sheet = await sheetOf([{ label: 'Before', bytes: before }, ...(now ? [{ label: `Now  ${now.size}`, bytes: now.bytes }] : [])]);
+                const diff = item.git ? await gitSince(item.git) : null;
+                return send({
+                  ok: true, sheet: keepPicture(shots, 'compare', sheet), gone: !now,
+                  git: !!item.git, changed: diff ? diff.changed : [], added: diff ? diff.added : [],
+                  undone: item.undone || null
+                });
+              }
+              if (route === '/undo') {
+                if (!item.git) return send({ error: 'this project is not in git, so there is nothing to go back to' }, 400);
+                const files = Array.isArray(asked.files) ? asked.files.map(String) : [];
+                const done = await gitRestore(item.git, files);
+                item.undone = { files: done.restored, redo: done.redo };
+                writeItem(item);
+                return send({ ok: true, restored: done.restored });
+              }
+              if (route === '/redo') {
+                if (!item.undone || !item.undone.redo) return send({ error: 'nothing to bring back' }, 400);
+                const done = await gitRestore({ root: item.git.root, hash: item.undone.redo, untracked: [] }, item.undone.files);
+                item.undone = null;
+                writeItem(item);
+                return send({ ok: true, restored: done.restored });
+              }
             } catch (err) {
-              value = { ok: false, status: 0, why: err.name === 'TimeoutError' ? 'still rendering' : 'nothing is answering' };
+              return send({ error: err.message }, 500);
             }
-            readyCache.set(url, { at: Date.now(), value });
-            return send(value);
+          }
+
+          // A picture the board has made, to paste or to look at. Only from the folder they
+          // are kept in.
+          if (route === '/shotfile' && q.get('name')) {
+            const file = path.join(cacheRoot(studioRoot), 'shots', path.basename(q.get('name')));
+            if (!fs.existsSync(file)) { res.writeHead(404, JSONH); return res.end('{}'); }
+            res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+            return res.end(fs.readFileSync(file));
+          }
+          // A picture made in the board itself (a note drawn on one, two put side by side) is
+          // kept the same way, so it can be pasted the same way.
+          if (route === '/shot/save' && req.method === 'PUT') {
+            const chunks = [];
+            for await (const chunk of req) chunks.push(chunk);
+            const bytes = Buffer.concat(chunks);
+            if (bytes.length < 24 || bytes.readUInt32BE(0) !== 0x89504e47) return send({ error: 'a PNG is needed' }, 400);
+            return send({ ok: true, ...keepPicture(path.join(cacheRoot(studioRoot), 'shots'), q.get('label') || 'picture', bytes) });
+          }
+          if (route === '/remembered' && q.get('page')) {
+            const folder = path.join(cacheRoot(studioRoot), 'remembered');
+            let items = [];
+            try {
+              items = fs.readdirSync(folder).filter(f => f.endsWith('.json'))
+                .map(f => JSON.parse(fs.readFileSync(path.join(folder, f), 'utf8')))
+                .filter(i => i.page === q.get('page'))
+                .sort((a, b) => b.at - a.at)
+                .map(i => ({ id: i.id, label: i.label, at: i.at, selector: i.find && i.find.selector, git: !!i.git, undone: !!i.undone }));
+            } catch (_) {}
+            return send({ items });
+          }
+
+          // A frame's picture, and asking for one to be drawn.
+          //
+          // GET is the picture if there is one. POST draws it if there is not (or if the
+          // frame has changed since), and answers when it is done, so the board asks once
+          // and then fetches. Drawing is queued, newest ask first, one page at a time.
+          if (route === '/poster' && req.method === 'GET' && q.get('page')) {
+            const have = readPoster(studioRoot, q.get('page'));
+            if (!have) { res.writeHead(404, JSONH); return res.end('{}'); }
+            res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store' });
+            return res.end(fs.readFileSync(have.file));
+          }
+          if (route === '/poster' && req.method === 'POST') {
+            const { page: id, again } = await body();
+            const found = listPages().find(p => p.id === id);
+            if (!found || !found.url) return send({ ok: false, why: 'this frame has no page to draw' }, 404);
+            const url = found.url.startsWith('http')
+              ? found.url
+              : `http://${req.headers.host || 'localhost:' + servePort}${found.url}`;
+            if (again) forgetPoster(studioRoot, id);
+            const want = { width: found.frame.width, height: found.frame.height, changed: found.changed || 0 };
+            const have = readPoster(studioRoot, id, want);
+            if (have && have.fresh) return send({ ok: true, ...have.meta });
+
+            // Answered at once, and told over the socket when it is drawn. A browser keeps six
+            // connections to one address, and a board of eighty frames asking for eighty
+            // pictures that each take seconds would hold every one of them, with everything
+            // else the board asks for waiting behind.
+            ensurePoster({
+              root: studioRoot,
+              id,
+              shot: { url, width: found.frame.width, height: found.frame.height },
+              want,
+              ready: () => served(url).then(v => v.ok)
+            }).then(answer => {
+              server.ws.send({ type: 'custom', event: 'studio:poster', data: { id, ok: !!answer.ok, at: answer.at || 0 } });
+            }).catch(() => {});
+            return send({ queued: true });
           }
 
           if (route === '/studio') {
@@ -1092,7 +1293,13 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
               working: working(),
               checking: [...checking],
               checks: readChecks(),
-              pages,
+              // `poster` is when its picture was drawn, so a frame asks for the picture
+              // only if there is one, and draws one if there is not.
+              pages: pages.map(p => {
+                if (!p.url) return p;
+                const have = readPoster(studioRoot, p.id);
+                return have ? { ...p, poster: have.meta.at } : p;
+              }),
               sections: listSections(pages).map(({ id, name, frames }) => ({ id, name, frames })),
               refs: listRefs().length,
               live: {
@@ -1161,12 +1368,12 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
               return send({ error: 'a local address is needed' }, 400);
             }
             try {
-              const height = await measureHeight({
+              const found = await measureHeight({
                 url: full,
                 width: Number(asked.width) || 1440,
                 viewport: Number(asked.viewport) || 900
               });
-              return send({ height });
+              return send(found);
             } catch (err) {
               server.config.logger.warn('[studio] could not measure ' + full + ': ' + err.message);
               return send({ error: err.message }, 500);

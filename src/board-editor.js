@@ -14,6 +14,7 @@ const {
 } = require('./boards');
 const { ensureServer, releaseServer } = require('./server');
 const { ensureClaudeContext, askClaude } = require('./claude');
+const { copyImage } = require('./clipboard');
 
 const log = (line) => state.log && state.log.appendLine(line);
 const panels = state.panels;
@@ -140,6 +141,19 @@ function wirePanel(panel, canvas) {
     if (msg.type === 'copy' && typeof msg.text === 'string') {
       vscode.env.clipboard.writeText(msg.text);
       vscode.window.setStatusBarMessage(`Design: ${msg.text} copied.`, 3000);
+    }
+    // A picture of an element, to paste into Claude. The editor's clipboard is text only,
+    // so the picture goes on the system one. When that is not possible the file's path is
+    // copied instead, which Claude can read as well.
+    if (msg.type === 'copyImage' && typeof msg.file === 'string') {
+      copyImage(msg.file, typeof msg.text === 'string' ? msg.text : '').then(ok => {
+        if (ok) {
+          vscode.window.setStatusBarMessage(msg.text ? 'Design: picture and words copied.' : 'Design: picture copied.', 3000);
+        } else {
+          vscode.env.clipboard.writeText(msg.file);
+          vscode.window.setStatusBarMessage('Design: the picture could not be put on the clipboard, its path is copied instead.', 6000);
+        }
+      });
     }
     if (msg.type === 'say' && typeof msg.text === 'string') {
       vscode.window.setStatusBarMessage(`Design: ${msg.text}`, 5000);

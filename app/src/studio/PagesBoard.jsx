@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Render } from '@puckeditor/core';
 import { puckConfig } from 'virtual:studio-catalog';
 import { Board } from './Board.jsx';
-import { useAwake } from './awake.js';
-import { getPage, putPositions, putSections, isReady, measurePage, renameFrame, deleteFrame, checkFrame, getStudio, onStudioChanged } from './api.js';
+import { useTier } from './awake.js';
+import { getPage, putPositions, putSections, isReady, measurePage, ensurePoster, onPoster, renameFrame, deleteFrame, checkFrame, getStudio, onStudioChanged } from './api.js';
 import { ExportDialog } from './ExportDialog.jsx';
 import { Setup } from './Setup.jsx';
 
@@ -60,7 +60,18 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
   const [edits, setEdits] = useState({});
   const [bands, setBands] = useState(initial?.sections || []);
   const [measuring, setMeasuring] = useState(null);
-  // Which frame is chosen, so it can be kept awake wherever it ends up.
+  // Which frames scroll sideways, and by how much. A screen scrolls down and that is what
+  // it is for; a screen that scrolls across has something wider than the screen, and that
+  // is a mistake whatever the device. It is found when the frame is measured, so it is
+  // known without anybody asking.
+  const [sideways, setSideways] = useState({});
+  // How tall each page really is, as measured. A frame whose page is no taller than it
+  // has nothing to scroll, and a frame with nothing to scroll must not take the wheel.
+  const [natural, setNatural] = useState({});
+  // How many times something in the project changed. A frame that was running while it
+  // did has a picture that is out of date, and says so when it stops running.
+  const [epoch, setEpoch] = useState(0);
+  // Which frame is chosen.
   const [chosen, setChosen] = useState('');
   // How many times each frame has been asked to load its page again. The number is the
   // ask: a frame throws away what it has and starts over when its number changes.
@@ -103,7 +114,7 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
   const heard = useRef(0);
 
   // A route added or removed anywhere lands on the board without a refresh.
-  useEffect(() => onStudioChanged(() => { heard.current = Date.now(); reload(); }), [reload]);
+  useEffect(() => onStudioChanged(() => { heard.current = Date.now(); setEpoch(n => n + 1); reload(); }), [reload]);
 
   const puckIds = (studio?.pages || []).filter(p => p.kind === 'puck').map(p => p.id);
 
@@ -198,8 +209,10 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
 
   useEffect(() => {
     if (measuring) return;
+    // A frame whose height somebody chose is measured as well, for its width only: the
+    // height stays theirs, but a screen that scrolls sideways is something to be told.
     const next = (studio?.pages || [])
-      .find(p => p.url && !p.sized && near.has(p.id) && due(p));
+      .find(p => p.url && near.has(p.id) && due(p));
     if (!next) return;
     measured.current.set(next.id, { at: Date.now(), file: next.changed || 0 });
     const e = edits[next.id] || {};
@@ -210,6 +223,7 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
       url: next.url,
       width: e.width || next.frame.width,
       fit: next.fit || undefined,
+      keepHeight: !!next.sized,
       viewport: viewportFor(e.height || next.frame.height),
       was: e.height || next.frame.height
     });
@@ -227,6 +241,18 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
     measurePage(measuring.url, measuring.width, measuring.viewport)
       .then(answer => {
         if (!alive || !answer || !answer.height) return;
+        setSideways(was => {
+          const by = answer.wide || 0;
+          const had = was[measuring.id];
+          if (!by && !had) return was;
+          if (by && had && had.by === by && had.clipped === !!answer.clipped) return was;
+          const next = { ...was };
+          if (by) next[measuring.id] = { by, clipped: !!answer.clipped }; else delete next[measuring.id];
+          return next;
+        });
+        setNatural(was => (was[measuring.id] === answer.height ? was : { ...was, [measuring.id]: answer.height }));
+        // A height somebody chose stays theirs.
+        if (measuring.keepHeight) return;
         // A little over, never a little under: a frame a pixel short of its page grows a
         // scrollbar, and a scrollbar changes the width, and the width changes the height.
         const height = Math.ceil(answer.height) + 8;
@@ -380,6 +406,18 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
     canRename: page.source === 'canvas',
     canDelete: page.source === 'canvas',
     check: checks[page.id] || null,
+    sideways: sideways[page.id] || null,
+    // Has its own scrolling: a page in an iframe that is taller than the frame. Not known
+    // yet counts as yes, so a frame is never locked out of its wheel by a measurement that
+    // has not come back.
+    scrolls: !!page.url && !page.fit && (natural[page.id] === undefined || natural[page.id] > page.frame.height + 2),
+    // Changes when the frame loads its page again, which puts it back at the top.
+    nonce: reloads[page.id] || 0,
+    // Changes whenever the frame's file or anything else in the project did, which is when
+    // what is chosen inside it has to be read again.
+    stamp: `${page.changed || 0}:${epoch}`,
+    // Drawn by an iframe, which is what can be run, and what can be a picture instead.
+    running: !!page.url,
     path: page.path || '',
     // Nothing but the name until the name is hovered. A row of buttons over every frame
     // is a row of buttons you read past, and the board is for looking at the work.
@@ -394,8 +432,8 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
         height={page.frame.height}
         working={busyIds.has(page.id)}
         scanning={scanIds.has(page.id)}
-        keepAwake={page.id === chosen}
         reload={reloads[page.id] || 0}
+        epoch={epoch}
         onNear={sawNear}
       >
         {docs[page.id] ? <Render config={puckConfig} data={docs[page.id].data} /> : null}
@@ -419,6 +457,7 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
         onRename={onRename}
         onDelete={onDelete}
         onCheck={onCheck}
+        onSay={say}
         onCopy={(id, text) => {
           ask({ type: 'copy', text });
           try { navigator.clipboard && navigator.clipboard.writeText(text); } catch (_) {}
@@ -511,29 +550,39 @@ function layout(bands, byId) {
 
 // What a frame shows, and what it shows while it has nothing to show.
 //
-// Two rules. It loads only once it is near the viewport, because a project with two
-// hundred routes would otherwise start two hundred iframes at once and the board would
-// never settle. And it never shows a framework's error page: that page is the dev server
-// talking to a developer about its own internals, and on a board it reads as though the
-// design itself is broken. So the board asks whether the page is really being served,
-// shows that it is coming until it is, and keeps asking.
+// What it is depends on its tier, which the board works out from where it is looking (see
+// awake.js): running, a picture of itself, or nothing at all. And it never shows a
+// framework's error page. That page is the dev server talking to a developer about its own
+// internals, and on a board it reads as though the design itself is broken. So the board
+// asks whether the page is really being served, shows that it is coming until it is, and
+// keeps asking.
 
 const WAIT = [1500, 3000, 6000, 10000];
 
-function Frame({ page, width, height, working, scanning, keepAwake, reload, onNear, children }) {
+function Frame({ page, width, height, working, scanning, reload, epoch, onNear, children }) {
   const ref = useRef(null);
-  const near = useAwake(ref, { keep: keepAwake });
+  const tier = useTier(page.id);
+  const near = tier !== 'asleep';          // in view, or about to be
+  const running = tier === 'live';         // the real page is running in it
   const [served, setServed] = useState(!page.url);  // the server says the page is there
   const [drawn, setDrawn] = useState(!page.url);    // the frame has finished loading it
   const [why, setWhy] = useState('');
   const [slow, setSlow] = useState(false);
   const [again, setAgain] = useState(0);
+  // Its picture: whether there is one, and a number that changes when there is a new one.
+  const [pic, setPic] = useState(page.poster ? 'unknown' : 'no');
+  const [picture, setPicture] = useState(0);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     // The board is told once, the first time this frame is reached, so it knows which
     // ones are worth measuring.
     if (near && onNear) onNear(page.id);
   }, [near, onNear, page.id]);
+
+  // A frame that starts running starts from nothing: its page is not drawn until it says
+  // so, and a picture covers the gap.
+  useEffect(() => { if (running && page.url) setDrawn(false); }, [running, page.url]);
 
   // Asked to load the page again: throw away what is there and start over, the same as
   // the one button the waiting card offers.
@@ -549,9 +598,10 @@ function Frame({ page, width, height, working, scanning, keepAwake, reload, onNe
 
   // Asked while the frame is already loading it, not before. A page this dev server has
   // not drawn before can take most of a minute, and asking first and loading after made
-  // every frame cost that twice.
+  // every frame cost that twice. Only a running frame asks: a picture is drawn by the
+  // server, which asks for itself.
   useEffect(() => {
-    if (!near || !page.url) return;
+    if (!running || !page.url) return;
     let alive = true;
     let tries = 0;
     let timer;
@@ -570,7 +620,7 @@ function Frame({ page, width, height, working, scanning, keepAwake, reload, onNe
     };
     look();
     return () => { alive = false; clearTimeout(timer); };
-  }, [near, page.id, page.url, again]);
+  }, [running, page.id, page.url, again]);
 
   // When the work finishes, the frame loads again: what it is showing is now old.
   const wasWorking = useRef(working);
@@ -579,16 +629,67 @@ function Frame({ page, width, height, working, scanning, keepAwake, reload, onNe
       setServed(!page.url);
       setDrawn(!page.url);
       setAgain(n => n + 1);
+      setPic('unknown');
+      setPicture(n => n + 1);
     }
     wasWorking.current = working;
   }, [working, page.url]);
 
-  const ready = !working && served && drawn;
+  const loaded = !page.url || (running && served && drawn);   // the real page is there
+  const wantPicture = near && !!page.url && !working && !loaded;
+
+  // The server says when a picture was drawn: one that turns up is fetched, and none is
+  // asked for until it is known there is none, so nothing is requested that is not there.
+  useEffect(() => {
+    if (page.poster && pic === 'no') { setPic('unknown'); setPicture(n => n + 1); }
+  }, [page.poster]);
+
+  // A frame that has no picture asks for one, and fetches it when it is drawn. The server
+  // draws them one at a time, so the ones in front of you come first. A page that is not
+  // being served yet is asked about again in a few seconds.
+  useEffect(() => {
+    if (!wantPicture || pic !== 'no') return;
+    let alive = true;
+    let timer;
+    const later = () => { timer = setTimeout(() => alive && setRetry(n => n + 1), 8000); };
+    ensurePoster(page.id).then(answer => {
+      if (!alive) return;
+      // Already drawn; otherwise it is drawn in its turn and the socket says so.
+      if (answer && answer.ok) { setPic('unknown'); setPicture(n => n + 1); }
+      else if (!answer || (!answer.queued && !answer.ok)) later();
+    }).catch(() => { if (alive) later(); });
+    return () => { alive = false; clearTimeout(timer); };
+  }, [wantPicture, pic, page.id, retry]);
+
+  // The picture was drawn, or the page was not being served yet and it is asked for again.
+  useEffect(() => onPoster(event => {
+    if (event.id !== page.id) return;
+    if (event.ok) { setPic('unknown'); setPicture(n => n + 1); }
+    else setTimeout(() => setRetry(n => n + 1), 8000);
+  }), [page.id]);
+
+  // It was running, the project changed meanwhile, and now it stops: the picture it has
+  // is of how it used to look, so it is drawn again.
+  const epochNow = useRef(epoch);
+  epochNow.current = epoch;
+  useEffect(() => {
+    if (!running || !page.url) return;
+    const was = epochNow.current;
+    return () => {
+      if (epochNow.current === was) return;
+      ensurePoster(page.id, true).then(() => setPicture(n => n + 1)).catch(() => {});
+    };
+  }, [running, page.id, page.url]);
+
+  // What there is to show while the real page is not there: its picture if it has one,
+  // and a card that says what is happening if it does not.
+  const pictured = pic === 'yes';
+  const card = near && (working || (!loaded && !pictured));
 
   return (
     <div ref={ref} className="st-screen" data-frame={page.id} style={{ width, height }}>
       {!near ? <div className="st-frame-pending" /> : null}
-      {near && page.url
+      {running && page.url
         ? <iframe
             key={again}
             src={page.url}
@@ -602,12 +703,24 @@ function Frame({ page, width, height, working, scanning, keepAwake, reload, onNe
           />
         : null}
       {near && !page.url ? children : null}
+      {wantPicture && pic !== 'no'
+        ? <img
+            className={'st-poster' + (pictured ? ' is-ready' : '')}
+            src={`/__api/poster?page=${encodeURIComponent(page.id)}&v=${picture}`}
+            alt=""
+            draggable={false}
+            decoding="async"
+            onLoad={() => setPic('yes')}
+            onError={() => setPic('no')}
+          />
+        : null}
       {scanning ? <Scanning /> : null}
-      {near && !ready ? (
+      {card ? (
         <Coming
           title={page.title}
           working={working}
-          slow={!working && slow}
+          picture={!running && !working}
+          slow={!working && running && slow}
           why={why}
           onAgain={() => { setSlow(false); setServed(false); setDrawn(false); setAgain(n => n + 1); }}
         />
@@ -629,7 +742,7 @@ function Scanning() {
 
 // The waiting state. It is the shape of the thing that is coming, in the board's own
 // colours, and it says what is happening in one line rather than showing a stack trace.
-function Coming({ title, working, slow, why, onAgain }) {
+function Coming({ title, working, picture, slow, why, onAgain }) {
   return (
     <div className={'st-coming' + (working ? ' is-working' : '')}>
       <div className="st-coming-inner">
@@ -638,9 +751,11 @@ function Coming({ title, working, slow, why, onAgain }) {
         <p>
           {working
             ? 'Being designed...'
-            : slow
-              ? (why ? `Still waiting: ${why}.` : 'Still waiting for the dev server.')
-              : 'Rendering...'}
+            : picture
+              ? 'Drawing a picture...'
+              : slow
+                ? (why ? `Still waiting: ${why}.` : 'Still waiting for the dev server.')
+                : 'Rendering...'}
         </p>
         {!working && slow ? <button className="st-btn" onClick={onAgain}>Try again</button> : null}
       </div>
