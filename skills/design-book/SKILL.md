@@ -378,6 +378,26 @@ The last line says who should do it, because the size of the change decides what
 
 Both are in `~/.claude/agents/`, installed with this skill, and hand back two lines.
 
+## The board keeps itself in step with the default branch
+
+When a person has turned it on for the repo, the board's own files (the board file, `pages/`,
+`refs/`, `parts/`, `gen/`) are kept on the default branch, whatever branch the checkout is on:
+others' changes are brought in, and yours are committed and pushed a few seconds after you stop.
+So:
+
+- **Do not run git for the board.** No commit, push, pull, merge or branch for these files. It
+  does it, as one commit on top of origin that holds only them, and never touches the branch
+  you are on, your code or anything unpublished.
+- **Delete a frame through the board:** `POST $B/frame/delete`. That is the only deletion that
+  is shared. A file removed any other way (`rm`) is put back, because the safe reading of a
+  file that vanished is that it was not meant to. Nothing is ever deleted: what is replaced
+  or removed goes to `.designbook/.trash/sync/<time>/` first.
+- **Write `.designbook/.working` while you work** (below). Others' changes still come in, but
+  nothing of yours goes out until you remove it, so nobody gets half a page.
+- **A file you and somebody else both changed** is merged as text where it can be, and
+  otherwise kept as it is with "Choose a version" in the bar. Do not resolve it yourself.
+- `GET $B/sync` says where it stands.
+
 ## Say which frame you are working on
 
 Before you change or make anything, write the frame ids you are about to work on, one

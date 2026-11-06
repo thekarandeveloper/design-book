@@ -137,3 +137,17 @@ export const savePicture = (blob, label) =>
   fetch(`/__api/shot/save?label=${encodeURIComponent(label || 'picture')}`, { method: 'PUT', body: blob })
     .then(r => r.json());
 export const pictureUrl = name => `/__api/shotfile?name=${encodeURIComponent(name)}`;
+
+// Keeping the board's files on the repo's default branch, whatever branch is checked out.
+// The state arrives here once and then over the socket as it changes.
+export const getSync = () => json('/__api/sync');
+export const enableSync = on => send('/__api/sync/enable', 'POST', { on });
+export const syncNow = () => send('/__api/sync/now', 'POST', {});
+export const resolveSync = (path, take) => send('/__api/sync/resolve', 'POST', { path, take });
+// Many files changed at once and are held: send them, or put them back as origin has them.
+export const approveSync = action => send('/__api/sync/approve', 'POST', { action });
+export function onSync(handler) {
+  if (!import.meta.hot) return () => {};
+  import.meta.hot.on('studio:sync', handler);
+  return () => import.meta.hot.off('studio:sync', handler);
+}

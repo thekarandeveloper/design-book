@@ -7,6 +7,7 @@ import { Moodboard } from './Moodboard.jsx';
 import { Gallery } from './Gallery.jsx';
 import { SystemPage } from './SystemPage.jsx';
 import { Editor } from './Editor.jsx';
+import { SyncPill } from './Sync.jsx';
 
 // One bar, and the board under it.
 //
@@ -125,6 +126,8 @@ export function App() {
         >
           <GridIcon />
         </button>
+
+        {route.view === 'pages' && !studio.setup?.needed ? <SyncPill /> : null}
 
         <Search onPick={id => { go('/pages'); setFocus(id); }} />
       </header>

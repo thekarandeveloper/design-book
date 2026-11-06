@@ -1805,3 +1805,22 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .st-refpick button:hover { background: var(--st-hover); }
 .st-refpick img { width: 100%; height: 90px; object-fit: cover; border-radius: 4px; }
+
+/* ── where the board stands against the default branch ───────────────────── */
+.st-sync {
+  display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px;
+  border: 1px solid var(--st-line); border-radius: 999px; background: var(--st-raise); color: var(--st-muted);
+  font: 500 12px/1 -apple-system, system-ui, sans-serif; cursor: pointer; white-space: nowrap;
+}
+.st-sync:hover { background: var(--st-hover); color: var(--st-ink); }
+.st-sync i { width: 7px; height: 7px; border-radius: 50%; background: var(--st-faint); }
+.st-sync.is-idle i { background: #34c759; }
+.st-sync.is-syncing i, .st-sync.is-pending i { background: var(--st-accent); }
+.st-sync.is-syncing i { animation: st-pulse 1s ease-in-out infinite; }
+.st-sync.is-conflict, .st-sync.is-error, .st-sync.is-offline, .st-sync.is-no-branch, .st-sync.is-review { color: var(--st-ink); }
+.st-sync.is-conflict i, .st-sync.is-error i, .st-sync.is-no-branch i, .st-sync.is-review i { background: var(--st-warn); }
+.st-sync.is-offline i { background: var(--st-faint); }
+.st-sync b { min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: var(--st-warn); color: #1a1407; font-size: 10px; line-height: 16px; text-align: center; }
+@keyframes st-pulse { 50% { opacity: 0.35; } }
+.st-compare-files li { display: flex; align-items: center; gap: 8px; }
+.st-compare-files li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

@@ -282,6 +282,40 @@ is tucked into the left edge of the viewport, flush against it, and held there w
 part of that section is on screen, so panning never leaves you looking at frames that
 belong to nothing and never leaves a name floating over the work.
 
+## Keeping the board in step with the default branch
+
+The board's files are shared work, so they live on the repo's default branch, whatever branch
+you are on. A pill in the bar says where that stands and is the one place to turn it on (it
+asks once per repo, on each machine, and does nothing before that). From then on, a few
+seconds after you stop changing something, it fetches origin, brings in what others did,
+merges where you both changed one file, commits and pushes. Only the board's files go:
+`*.designbook`, `pages/`, `refs/`, `parts/`, `gen/`, `refs.json`.
+
+How, without a second working copy: the commit is made from git's plumbing. A temporary
+index is loaded with origin's tree, the changed files are written into it, and that is
+committed with origin's commit as its parent, then pushed. Nothing is checked out, so it
+costs no disk, does not care how big the repo is, and the checkout you work in is never
+involved. It never pushes your branch, and never pushes the default branch as it is on your
+machine, which may carry commits you have not published. It never forces: a refused push is
+fetched, merged and tried again, and then said out loud (a protected branch shows the
+server's own words).
+
+**Nobody's work is lost, in any case.** Nothing in it deletes a file. A file that is to be
+replaced or taken away is first moved to `.designbook/.trash/sync/<time>/`, and nothing
+empties that folder. A file is only overwritten if it is still exactly what was compared a
+moment ago, so an edit made while it works is never written over. A deletion is shared only
+if the board did it (the delete in the menu); a file that vanished any other way, by a git
+reset or a checkout or a wiped folder, is put back. A change to more than ten files at once,
+which is what a reset or a checkout of an old branch looks like and not what drawing looks
+like, is held in the bar with the list, with "Send them" and "Put them back". Two people
+changing the same lines of one file is never settled for them: both are kept and the pill
+asks, with "Keep mine" and "Take theirs", and what is not chosen goes to the trash.
+
+While an agent is working (`.designbook/.working`), others' changes still come in and nothing
+of yours goes out until it finishes, so nobody receives half a page. Files over 8 MB are left
+out and said so. The board's files are also excluded from `git status` on this machine only,
+in the repo's own `.git/info/exclude`, so they do not look like changes on a branch of your own.
+
 ## Native projects are read from their code
 
 A SwiftUI or Compose design system lives in Swift and Kotlin, not in a stylesheet, so it is

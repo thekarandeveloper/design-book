@@ -28,6 +28,7 @@ import {
 } from './inspect.js';
 import { snapshot as gitSnapshot, since as gitSince, restore as gitRestore } from './remember.js';
 import { readNativeTokens } from './native.js';
+import { createSync } from './sync.js';
 import { isScreenSize } from '../src/studio/frames.js';
 
 const JSONH = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
@@ -68,6 +69,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
   // live on the board, running its own framework, rather than redrawn here.
   let live = null;
   let servePort = 0;  // what this canvas server ended up listening on
+  let sync = null;    // keeps the board's files on the default branch (sync.js)
   const readyCache = new Map(); // url -> the last answer, for a few seconds
 
   // Is this page really being served, rather than an error page about the server?
@@ -553,7 +555,11 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
       ? text.replace(/(\/\/ (?:design|canvas):[^\n]*title=)([^|\n]*)/, (_, head) => `${head}${clean} `)
       : text.replace(/<title>[^<]*<\/title>/i, `<title>${clean.replace(/</g, '&lt;')}</title>`);
     fs.writeFileSync(dir('pages', was), text);
-    if (next !== was) fs.renameSync(dir('pages', was), dir('pages', next));
+    if (next !== was) {
+      fs.renameSync(dir('pages', was), dir('pages', next));
+      // The old name is gone because the board renamed it: that is a deliberate removal.
+      if (sync) sync.deleted(dir('pages', was));
+    }
 
     const newId = ext === 'astro' ? 'exp:' + next.replace(/\.astro$/, '') : 'canvas:' + next;
     if (newId !== id) {
@@ -995,7 +1001,20 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
       // a second, for as long as it was open. It was the slowest thing here and the
       // reason frames would not sit still.
       const mine = file => file === dir('studio.json') || file === dir('CLAUDE.md')
-        || file === dir('checks.json') || file === dir('.port');
+        || file === dir('checks.json') || file === dir('.port') || file === dir('.sync.json');
+
+      // Keeping the board's files on the default branch, whatever branch this checkout is on.
+      // Off until somebody turns it on for this repo on this machine (see sync.js).
+      sync = createSync({
+        boardFile: boardPath(),
+        studioRoot,
+        log: line => server.config.logger.info(line),
+        isWorking: () => working().length > 0,
+        debounce: Number(process.env.STUDIO_SYNC_DEBOUNCE) || 8000
+      });
+      sync.onChange(s => { try { server.ws.send({ type: 'custom', event: 'studio:sync', data: s }); } catch (_) {} });
+      server.httpServer && server.httpServer.on('close', () => sync.stop());
+      server.httpServer && server.httpServer.once('listening', () => setTimeout(() => sync.start(), 1500));
       // The same thing for the board file, which is written by hand as well as by us, so
       // it is what the file says rather than which file it is that decides.
       const ourOwnSave = file => file === boardPath() && textOf(file) === ownSave;
@@ -1004,6 +1023,8 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
         && (inProject(file) || file.startsWith(studioRoot + path.sep) || file === boardPath());
 
       server.watcher.on('change', file => {
+        sync.touched(file);
+        if (file === dir('.working') && !working().length) sync.finished();
         if (isComponent(file) || file.endsWith('catalog.jsx')) return invalidateCatalog();
         if (matters(file)) {
           refresh('change', inProject(file));
@@ -1011,6 +1032,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
         }
       });
       server.watcher.on('add', file => {
+        sync.touched(file);
         if (isComponent(file)) return invalidateCatalog();
         if (matters(file)) {
           refresh('add', inProject(file));
@@ -1018,6 +1040,8 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
         }
       });
       server.watcher.on('unlink', file => {
+        sync.touched(file);
+        if (file === dir('.working')) sync.finished();
         if (isComponent(file)) return invalidateCatalog();
         if (matters(file)) refresh('unlink', inProject(file));
       });
@@ -1272,6 +1296,28 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
                 .map(i => ({ id: i.id, label: i.label, at: i.at, selector: i.find && i.find.selector, git: !!i.git, undone: !!i.undone }));
             } catch (_) {}
             return send({ items });
+          }
+
+          // Keeping the board's files on the default branch (sync.js). The state is also
+          // pushed over the socket, so this is read once and then heard.
+          if (route === '/sync' && req.method === 'GET') {
+            return send({ ...sync.status(), ...(await sync.probe()) });
+          }
+          if (route === '/sync/enable' && req.method === 'POST') {
+            const { on } = await body();
+            return send(await sync.enable(!!on));
+          }
+          if (route === '/sync/now' && req.method === 'POST') {
+            return send(await sync.now());
+          }
+          if (route === '/sync/approve' && req.method === 'POST') {
+            const { action } = await body();
+            return send(action === 'revert' ? await sync.revert() : await sync.approve());
+          }
+          if (route === '/sync/resolve' && req.method === 'POST') {
+            const { path: file, take } = await body();
+            if (take !== 'mine' && take !== 'theirs') return send({ error: 'mine or theirs' }, 400);
+            return send(await sync.resolve(String(file || ''), take));
           }
 
           // A frame's picture, and asking for one to be drawn.
@@ -1541,6 +1587,8 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
             fs.mkdirSync(dir('.trash'), { recursive: true });
             try { fs.renameSync(from, dir('.trash', name)); }
             catch (err) { return send({ error: err.message }, 500); }
+            // The board deleted it, so it is deleted for everybody: the only kind of delete that is shared.
+            sync.deleted(from);
 
             const doc = readBoard();
             doc.sections = (doc.sections || []).map(b => ({
