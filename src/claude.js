@@ -28,7 +28,23 @@ const log = (line) => state.log && state.log.appendLine(line);
 const POINTER_START = '<!-- design-book:start -->';
 const POINTER_END = '<!-- design-book:end -->';
 
-function pointerBlock(canvas) {
+// Whether this repo is a native app: an Xcode project, a Swift package or a Gradle build,
+// within a few folders of the root. Cheap, and asked only to decide one paragraph.
+function isNative(dir) {
+  const skip = new Set(['node_modules', '.git', 'Pods', 'build', '.build', 'DerivedData', '.gradle', 'dist', '.next']);
+  const look = (folder, depth) => {
+    let entries;
+    try { entries = fs.readdirSync(folder, { withFileTypes: true }); } catch (_) { return false; }
+    for (const e of entries) {
+      if (/\.(xcodeproj|xcworkspace)$/.test(e.name) || e.name === 'Package.swift' || /^build\.gradle(\.kts)?$/.test(e.name)) return true;
+    }
+    if (depth >= 3) return false;
+    return entries.some(e => e.isDirectory() && !e.name.startsWith('.') && !skip.has(e.name) && look(path.join(folder, e.name), depth + 1));
+  };
+  return look(dir, 0);
+}
+
+function pointerBlock(canvas, native) {
   const file = path.basename(canvas.file);
   return [
     POINTER_START,
@@ -55,6 +71,15 @@ function pointerBlock(canvas) {
     '**It must not look like a machine made it.** Unless the ask says otherwise: no em dashes,',
     'no outline or stroke illustration, no gradient mesh, no glow, no abstract swooshes.',
     '',
+    ...(native ? [
+      '**This is a native app, and a page on the board is built from its code.** Do not build',
+      'or run the app, do not open a simulator and do not take screenshots for it, even for an',
+      '"exact replica". A rule in this file that asks for a build, a run and a screenshot before',
+      'saying something works is about changing the app, and a board page is not the app: it is',
+      `HTML drawn from the code, and the code is the reference. \`${BOOK_DIR}/CLAUDE.md\` has`,
+      'the design system read out of it, every value resolved.',
+      ''
+    ] : []),
     'The rest of the house rules are in the `design-book` skill, which loads itself when there',
     'is designing to do.',
     POINTER_END
@@ -80,7 +105,7 @@ function ensureClaudeContext(canvas) {
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch (_) {}
 
-  const block = pointerBlock(canvas);
+  const block = pointerBlock(canvas, isNative(claudeHome(canvas)));
   // A repo written to under either older name carries those markers: `design-board`
   // while this was Design, `design-canvas` before that. Each one is replaced where it
   // sits, so nobody ends up with two blocks saying the same thing.
@@ -166,4 +191,4 @@ async function askClaude(canvas, pageFile) {
   );
 }
 
-module.exports = { ensureClaudeContext, askClaude, hasClaudeCode, pointerBlock, claudeHome };
+module.exports = { ensureClaudeContext, askClaude, hasClaudeCode, pointerBlock, claudeHome, isNative };

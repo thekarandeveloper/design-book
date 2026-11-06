@@ -173,6 +173,10 @@ export function rulesBody({ projectRoot, live, pages, sections, refs, parts, com
   if (native) {
     L.push('### The design system, read from its code');
     L.push('');
+    L.push('**This is a native app. Build the page from its code: do not build or run the app, open a');
+    L.push('simulator or take screenshots, even for an "exact replica".** The code is the reference, and');
+    L.push('what follows is the code with every value resolved. A page is HTML drawn from it.');
+    L.push('');
     L.push('Built from the Swift and Kotlin source as it is now. Use these values and these names,');
     L.push('not a colour or a size of your own. Where a role is written as `brand.light.level5` the');
     L.push('code refers to it by that name.');
