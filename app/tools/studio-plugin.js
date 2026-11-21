@@ -128,6 +128,38 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
     }
     return paletteCache.value;
   }
+
+  // What the board's own frames use, as opposed to what the project's code declares.
+  //
+  // Only `pages` and `parts`: the rest of the studio folder is either generated from this
+  // very reading (CLAUDE.md, studio.json) or is somebody's own state, and reading the
+  // generated files back would feed the list into itself, a colour printed once becoming
+  // a colour "used" forever.
+  //
+  // Not cached on a timer like the project's palette. The point of it is that a frame
+  // drawn a second ago is already in it, and the pages folder is small enough that reading
+  // it costs nothing next to the project walk.
+  function boardPalette() {
+    const merge = (a, b) => {
+      const by = new Map();
+      for (const entry of [...(a || []), ...(b || [])]) {
+        const had = by.get(entry.value);
+        if (had) had.count += entry.count;
+        else by.set(entry.value, { ...entry });
+      }
+      return [...by.values()].sort((x, y) => y.count - x.count);
+    };
+    const out = { colours: [], fonts: [], svgFiles: [], files: 0 };
+    for (const where of ['pages', 'parts']) {
+      let read;
+      try { read = readPalette(dir(where)); } catch (_) { continue; }
+      out.colours = merge(out.colours, read.colours);
+      out.fonts = merge(out.fonts, read.fonts);
+      out.svgFiles = [...out.svgFiles, ...read.svgFiles];
+      out.files += read.files;
+    }
+    return out;
+  }
   // A native project's design system, read from its Swift and Kotlin. A few seconds, because
   // reading is cheap and the file somebody is editing is the one that has to be current.
   let nativeCache = { at: 0, root: '', value: null };
@@ -930,6 +962,7 @@ import IOSNavBar from '@kit/ios/IOSNavBar.astro';
           const pages = listPages();
           writeRules(dir('CLAUDE.md'), rulesBody({
             palette: paletteFor(root),
+            boardUses: boardPalette(),
             native: nativeFor(root),
             projectRoot: root,
             board: boardPath(),

@@ -57,8 +57,40 @@ in the \`design-book\` skill, which loads itself when there is designing to do.
 `;
 }
 
-export function rulesBody({ projectRoot, live, pages, sections, refs, parts, components, styles, tokens, preview, palette, native, board }) {
+
+// What the board's own frames use, folded into the design system as one list.
+//
+// Karan asked for one list rather than two, so a colour that only exists on a frame sits
+// with the ones the code declares. The source is on every line because of what that
+// means: a value invented on a frame is now in the design system, and the next person to
+// read this file cannot tell an agent's invention from the app's real token unless the
+// line says so. `(board)` is the warning, and a long run of them is the thing to fix.
+// Every colour the native system already resolves to, so a value the board uses is only
+// called new when it really is.
+function nativeHexes(native) {
+  const out = [];
+  for (const r of (native && native.roles) || []) {
+    for (const v of Object.values(r)) {
+      if (typeof v === 'string' && /^#[0-9a-fA-F]{6,8}$/.test(v)) out.push(v);
+    }
+  }
+  return out;
+}
+
+function boardLines(boardUses, known) {
+  if (!boardUses || !boardUses.colours || !boardUses.colours.length) return [];
+  const seen = new Set((known || []).map(v => String(v).toLowerCase()));
+  const extra = boardUses.colours.filter(c => !seen.has(String(c.value).toLowerCase()));
+  if (!extra.length) return [];
   const L = [];
+  for (const c of extra.slice(0, 24)) L.push(`${c.value}   x${c.count}   (board)`);
+  return L;
+}
+
+export function rulesBody({ projectRoot, live, pages, sections, refs, parts, components, styles, tokens, preview, palette, native, board, boardUses }) {
+  const L = [];
+  // Whether the board's own colours have been folded into a design system block already.
+  let boardShown = false;
   L.push('## What is on this board right now');
   L.push('');
   L.push(`Generated ${new Date().toISOString().slice(0, 16).replace('T', ' ')}. Do not edit between the`);
@@ -147,11 +179,15 @@ export function rulesBody({ projectRoot, live, pages, sections, refs, parts, com
     }
     L.push('');
     const colours = (tokens?.colours || []).slice(0, 24);
-    if (colours.length) {
-      L.push('Colour:');
+    const fromBoard = boardLines(boardUses, (tokens?.colours || []).map(t => t.value));
+    boardShown = boardShown || fromBoard.length > 0;
+    if (colours.length || fromBoard.length) {
+      L.push('Colour. `(code)` is declared by the project, `(board)` is used by a frame on');
+      L.push('this board and is not in the project. Reach for a `(code)` value first.');
       L.push('');
       L.push('```');
-      for (const t of colours) L.push(`${t.name}: ${t.value}${t.scope ? `   (${t.scope})` : ''}`);
+      for (const t of colours) L.push(`${t.name}: ${t.value}   (code)${t.scope ? `   ${t.scope}` : ''}`);
+      for (const line of fromBoard) L.push(line);
       L.push('```');
       L.push('');
     }
@@ -184,6 +220,24 @@ export function rulesBody({ projectRoot, live, pages, sections, refs, parts, com
     L.push('code refers to it by that name.');
     L.push('');
     L.push(...nativeTokenLines(native));
+    const fromBoard = boardLines(boardUses, nativeHexes(native));
+    boardShown = boardShown || fromBoard.length > 0;
+    if (fromBoard.length) {
+      L.push('');
+      L.push('And these, used by a frame on this board and declared nowhere in the code. They');
+      L.push('are part of the system now because they are on a screen, which is the problem');
+      L.push('with them: each one is either a value that should be named in the code, or a');
+      L.push('frame that should have used a role above instead.');
+      L.push('');
+      L.push('```');
+      L.push(...fromBoard);
+      L.push('```');
+    }
+    if (boardUses && boardUses.fonts && boardUses.fonts.length) {
+      L.push('');
+      L.push(`Fonts on the board: ${boardUses.fonts.slice(0, 8).map(f => f.value).join(', ')}.`);
+    }
+    L.push('');
   }
 
   // A native project's hex strings are counted by the system above; counting them again as
@@ -212,6 +266,26 @@ export function rulesBody({ projectRoot, live, pages, sections, refs, parts, com
     }
     if (palette.svgFiles.length) {
       L.push(`SVG files: ${palette.svgFiles.slice(0, 12).map(f => '`' + f + '`').join(', ')}${palette.svgFiles.length > 12 ? ', and more' : ''}.`);
+      L.push('');
+    }
+  }
+
+  // A repo with no declared design system at all: no stylesheet of custom properties and
+  // no Swift or Kotlin to read. Then nothing above printed, and the only colours anybody
+  // has chosen are the ones on the frames. They are the design system so far, and saying
+  // nothing would be the one case where this file is silent about the thing it is for.
+  if (!boardShown) {
+    const only = boardLines(boardUses, []);
+    if (only.length) {
+      L.push('### Design system, so far');
+      L.push('');
+      L.push('This project declares none: no stylesheet of custom properties, no Swift or');
+      L.push('Kotlin to read. So these are the colours the frames on this board have chosen,');
+      L.push('most used first. Reuse them rather than adding a tenth near-black.');
+      L.push('');
+      L.push('```');
+      L.push(...only);
+      L.push('```');
       L.push('');
     }
   }

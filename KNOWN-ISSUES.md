@@ -217,3 +217,6 @@ Written here by `note.sh` from whatever repo the board was being used in, so a f
 recorded the moment it bites instead of being remembered later. Raw on purpose. Fixing one
 means promoting it: give it a number above, say what it looked like and what did not fix
 it, then delete it from here.
+
+### The board's history commits compiled Python bytecode: gen/ is one of its owned folders and __pycache__ sits inside it, so every .pyc lands in the repo unless that repo happens to gitignore it
+2026-11-21 · v0.74.0 · ~/Documents/Rachna-Labs/00-Shared · .designbook/gen/__pycache__

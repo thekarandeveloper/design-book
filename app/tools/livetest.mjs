@@ -41,6 +41,18 @@ proc.stderr.on('data', d => { log += d; });
 
 const stop = () => { try { proc.kill('SIGTERM'); } catch (_) {} };
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// Drawing a picture runs a headless browser through a queue, so how long it takes is not
+// a number this can know. Waiting a fixed few seconds passed on a warm machine and failed
+// on a cold one, which is a test reporting the weather.
+const until = async (what, ms = 40000) => {
+  const stop = Date.now() + ms;
+  while (Date.now() < stop) {
+    const v = await what();
+    if (v) return v;
+    await wait(500);
+  }
+  return null;
+};
 const api = async (p, init) => {
   const r = await fetch(`http://localhost:${PORT}/__api${p}`, init);
   return r.headers.get('content-type')?.includes('json') ? r.json() : r.text();
@@ -68,19 +80,32 @@ try {
   console.log('  frames the board sees:', JSON.stringify(pages0.map(p => p.id)));
   const made = await api('/poster', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ page: pages0[0] && pages0[0].id }) });
   console.log('  poster answer:', JSON.stringify(made));
-  await wait(6000);
-  const after = posterFiles().length;
-  ok('a picture is drawn when asked for', after > before, `${before} then ${after}; answer ${JSON.stringify(made)}`);
+  const drew = await until(async () => posterFiles().length > before);
+  ok('a picture is drawn when asked for', !!drew, `${before} pictures before, ${posterFiles().length} after waiting; answer ${JSON.stringify(made)}`);
 
-  const studioBefore = await api('/studio');
-  const posterAt = (studioBefore.pages || []).find(p => p.id === pages0[0].id)?.poster;
-  ok('and the board reports it', !!posterAt, JSON.stringify((studioBefore.pages || []).map(p => [p.id, p.poster])));
+  const posterAt = await until(async () =>
+    ((await api('/studio')).pages || []).find(p => p.id === pages0[0].id)?.poster);
+  ok('and the board reports it', !!posterAt, JSON.stringify(((await api('/studio')).pages || []).map(p => [p.id, p.poster])));
 
-  fs.writeFileSync(page, body('two'));
-  await wait(4000);
-  const studioAfter = await api('/studio');
-  const posterNow = (studioAfter.pages || []).find(p => p.id === pages0[0].id)?.poster;
-  ok('editing the page throws the picture away', !posterNow, `poster is still ${posterNow}`);
+  // A colour that exists only on a frame reaches the design system, marked (board).
+  // Karan asked for one list rather than two, so the label is the only thing separating
+  // a value the code declares from one an agent invented on a page.
+  fs.writeFileSync(page, body('two').replace('</Screen>', '</Screen>\n<style>.z{color:#BB2244}</style>'));
+  const rules = await until(async () => {
+    try {
+      const t = fs.readFileSync(path.join(studio, 'CLAUDE.md'), 'utf8');
+      return /#BB2244/i.test(t) ? t : null;
+    } catch (_) { return null; }
+  }) || '';
+  ok('a colour used only on a frame reaches the design system', /#BB2244/i.test(rules),
+    (rules.match(/#[0-9A-Fa-f]{6}[^\n]{0,24}/g) || []).slice(0, 4).join(' | ') || 'no colours at all');
+  ok('and is marked as the board\'s, not the code\'s', /#BB2244[^\n]*\(board\)/i.test(rules),
+    (rules.match(/#BB2244[^\n]*/i) || ['not on the page'])[0]);
+
+  const gone = await until(async () =>
+    !((await api('/studio')).pages || []).find(p => p.id === pages0[0].id)?.poster);
+  ok('editing the page throws the picture away', !!gone,
+    `poster is still ${((await api('/studio')).pages || []).find(p => p.id === pages0[0].id)?.poster}`);
 } catch (err) {
   console.log('  FAIL  the check itself broke:', err.message);
   console.log(log.slice(-1500));
