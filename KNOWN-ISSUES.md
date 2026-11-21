@@ -131,10 +131,26 @@ view.** Open the frames, or render the pages yourself and look at those. On a bu
 regeneration this matters most, because that is exactly when every poster goes stale at
 once and the board looks like nothing you did had any effect.
 
-Suggested fix: rebuild a frame's poster whenever its file changes, which is already the
-moment the live frame is rebuilt. Failing that, an endpoint that forces one, or marking a
-frame whose poster is older than its file so the board can show it as out of date rather
-than showing it as current.
+**Fixed on 2026-11-21.** Two halves, and either one alone left it broken.
+
+The server kept the picture. The watcher already knew which frames a changed file belongs
+to, because it re-checks them, and `forgetPoster` already existed with the right comment
+on it. Nothing called it except an explicit "draw it again" from the board. So the picture
+on disk stayed, `/__api/studio` reported it as current, and that is what a zoomed-out
+board drew. It is thrown away now at the moment the page changes, which is the same moment
+the live frame is rebuilt.
+
+The board never asked again. A frame asks for a picture only while it has none, and it
+learned "it has none" once, when it was first drawn. A picture that went away afterwards
+left the frame still holding the old one for as long as the board stayed open. It now
+goes back to asking when the picture goes, and refetches when its time moves.
+
+Held by `app/tools/livetest.mjs`, which starts a real board server against a throwaway
+board, draws a picture, edits the page and checks the picture is gone. That one fails if
+either half is put back.
+
+This also settles the contradiction with item 3 noted above: nothing is special-cased for
+a frame that has no picture any more, because a stale picture is now no picture.
 
 ## 8. Opening a board writes a starter page into a project that already has frames
 

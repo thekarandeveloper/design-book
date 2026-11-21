@@ -682,8 +682,19 @@ function Frame({ page, width, height, working, scanning, reload, epoch, onNear, 
 
   // The server says when a picture was drawn: one that turns up is fetched, and none is
   // asked for until it is known there is none, so nothing is requested that is not there.
+  //
+  // Three ways it moves, and only the first was handled. A picture appears, so fetch it.
+  // Its time changes, meaning it was drawn again, so fetch it again rather than keep
+  // showing the one already in the img. Or it goes, because the server threw it away when
+  // the page behind it changed, and then this frame has to go back to asking for a new
+  // one: without that last line the frame kept its old picture for as long as the board
+  // stayed open, which is KNOWN-ISSUES 7 from the other end.
+  const drawnAt = useRef(page.poster);
   useEffect(() => {
     if (page.poster && pic === 'no') { setPic('unknown'); setPicture(n => n + 1); }
+    else if (page.poster && page.poster !== drawnAt.current) setPicture(n => n + 1);
+    else if (!page.poster && pic !== 'no') setPic('no');
+    drawnAt.current = page.poster;
   }, [page.poster]);
 
   // A frame that has no picture asks for one, and fetches it when it is drawn. The server

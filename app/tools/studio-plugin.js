@@ -1120,12 +1120,26 @@ import IOSNavBar from '@kit/ios/IOSNavBar.astro';
         !mine(file) && !ourOwnSave(file)
         && (inProject(file) || file.startsWith(studioRoot + path.sep) || file === boardPath());
 
+      // A frame's picture is thrown away the moment the page behind it changes, which is
+      // the same moment the live frame is rebuilt. Kept, it is a picture of work that has
+      // been replaced, and a board zoomed out past reading distance shows nothing but
+      // pictures: 42 of 57 frames on the dev-kit board stood an hour or two behind their
+      // own files, with the titles and sections all correct and no way to tell
+      // (KNOWN-ISSUES 7). Thrown away, the frame has no picture, and a frame with no
+      // picture asks for one.
+      const staleFrames = file => {
+        for (const id of framesFrom(file)) {
+          forgetPoster(studioRoot, id);
+          checkSoon(id);
+        }
+      };
+
       server.watcher.on('change', file => {
         history.touched();
         if (isComponent(file) || file.endsWith('catalog.jsx')) return invalidateCatalog();
         if (matters(file)) {
           refresh('change', inProject(file));
-          for (const id of framesFrom(file)) checkSoon(id);
+          staleFrames(file);
         }
       });
       server.watcher.on('add', file => {
@@ -1133,7 +1147,7 @@ import IOSNavBar from '@kit/ios/IOSNavBar.astro';
         if (isComponent(file)) return invalidateCatalog();
         if (matters(file)) {
           refresh('add', inProject(file));
-          for (const id of framesFrom(file)) checkSoon(id);
+          staleFrames(file);
         }
       });
       server.watcher.on('unlink', file => {
