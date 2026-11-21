@@ -1089,7 +1089,10 @@ import IOSNavBar from '@kit/ios/IOSNavBar.astro';
         boardFile: boardPath(),
         studioRoot,
         log: line => server.config.logger.info(line),
-        debounce: Number(process.env.STUDIO_HISTORY_DEBOUNCE) || 4000
+        debounce: Number(process.env.STUDIO_HISTORY_DEBOUNCE) || 4000,
+        // The editor's `designbook.saveHistory`, handed over when this server was started.
+        // Unset means on, so a board run straight from the command line behaves as before.
+        saving: process.env.STUDIO_HISTORY !== 'off'
       });
       history.onChange(s => { try { server.ws.send({ type: 'custom', event: 'studio:history', data: s }); } catch (_) {} });
       server.httpServer && server.httpServer.on('close', () => history.stop());

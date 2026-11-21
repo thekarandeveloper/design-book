@@ -51,6 +51,16 @@
         "priority": "default"
       }
     ],
+    "configuration": {
+      "title": "Design Book",
+      "properties": {
+        "designbook.saveHistory": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Keep the board's own history, by committing its files to the branch you are already on as you draw.\n\nOnly the board's own files are ever named: its `.designbook` document, and `pages`, `refs`, `parts`, `gen` and `refs.json` inside its folder. Nothing is staged, checked out, fetched, pushed or rewritten, and going back to an older state is a new commit on top.\n\nTurn it off and the board commits nothing at all. Your work is still saved to disk; it is the commits that stop, so going back is then whatever your own git does. Takes effect when the board's server next starts: run **Design Book: Restart** after changing it."
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {

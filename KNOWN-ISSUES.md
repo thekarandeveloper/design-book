@@ -151,11 +151,37 @@ is. `/__api/studio` hands out `pages/01-screen.astro`, `POST /__api/frame/delete
 `exp:01-screen`, and passing the first returns `{"error":"no such frame"}`, which reads as
 "this frame does not exist" rather than "that is not how you name it".
 
+## 9. The board's history committed nothing where any folder above it was a symlink
+
+**Fixed on 2026-11-21, and it is why `designbook.saveHistory` exists.**
+
+`history.js` works out the board's own paths relative to the repo root, and compares two
+strings that are not the same string: `git rev-parse --show-toplevel` answers with every
+symlink resolved, while the board holds the path the editor opened. Where any folder above
+the repo is a link, and on macOS `/tmp` and `/var` always are, every one of the board's
+paths came out starting with `../` and was dropped as "outside the repo".
+
+What made it worse than a silent no-op: an empty pathspec does not mean "nothing" to git,
+it means **everything**. `git status --porcelain --` with no paths answers with the whole
+repo, so the board would have taken somebody's unrelated changed files as its own, and
+`git add --` with no paths quietly adds nothing, so the commit then failed on whichever of
+them git had never seen. Against the one promise at the top of that file: only the board's
+own files, named explicitly, every time.
+
+Both halves are fixed: the paths are resolved on both sides before they are compared, and
+an empty pathspec now means the board does nothing at all rather than reaching for the
+repo. Four tests in `app/tools/selftest.mjs` hold it, including one that fails if the
+board ever commits a file that is not its own.
+
+Found while making the history optional, not while using the board: on Karan's own paths
+nothing above the repo is a link, so it never showed there.
+
 ---
 
 Items 1 to 6 written 2026-11-15 from the Sakhi iOS board, while drawing three options for
 the calendar sheet's month header. Items 7 and 8 written 2026-11-19 from the AppKit board
-in `07-Dev-Kit`, while redrawing all 57 of its screens.
+in `07-Dev-Kit`, while redrawing all 57 of its screens. Item 9 written 2026-11-21, found
+while making the history optional.
 
 ## Captured
 

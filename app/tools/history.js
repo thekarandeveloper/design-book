@@ -22,6 +22,10 @@
 //     is the whole point of committing on every change.
 //   - A repo that is not a repo, a board outside any repo, or git missing: everything
 //     here answers "no history" and does nothing.
+//   - Switched off (`designbook.saveHistory`, which reaches here as STUDIO_HISTORY=off):
+//     the same, and nothing is committed at all. Reading an existing history and going
+//     back in it still work, because those are asked for rather than automatic. Drawing
+//     is saved to disk either way; it is only the commits that stop.
 
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -66,7 +70,7 @@ function git(args, cwd, { timeout = 15000, keep = false } = {}) {
   });
 }
 
-export function createHistory({ boardFile, studioRoot, log = () => {}, debounce = 9000 }) {
+export function createHistory({ boardFile, studioRoot, log = () => {}, debounce = 9000, saving = true }) {
   let repo = '';          // the repo root, once it is known
   let branch = '';        // the branch as of the last look
   let timer = 0;
@@ -85,9 +89,10 @@ export function createHistory({ boardFile, studioRoot, log = () => {}, debounce 
   // A tracked path that has been deleted is kept, because its deletion is a change to
   // record.
   let known = new Set();
+  const real = p => { try { return fs.realpathSync(p); } catch (_) { return p; } };
   function paths() {
     if (!repo) return [];
-    const rel = p => path.relative(repo, p).split(path.sep).join('/');
+    const rel = p => path.relative(repo, real(p)).split(path.sep).join('/');
     const want = [rel(boardFile)];
     for (const d of OWNED_DIRS) want.push(rel(path.join(studioRoot, d)));
     for (const f of OWNED_FILES) want.push(rel(path.join(studioRoot, f)));
@@ -103,7 +108,7 @@ export function createHistory({ boardFile, studioRoot, log = () => {}, debounce 
   // is still named.
   async function learn() {
     if (!repo) return;
-    const rel = p => path.relative(repo, p).split(path.sep).join('/');
+    const rel = p => path.relative(repo, real(p)).split(path.sep).join('/');
     const under = rel(studioRoot);
     const out = await git(['ls-files', '-z', '--', under, rel(boardFile)], repo, { keep: true });
     known = new Set((out.out || '').split('\0').filter(Boolean));
@@ -114,7 +119,11 @@ export function createHistory({ boardFile, studioRoot, log = () => {}, debounce 
     if (!fs.existsSync(start)) return set({ on: false, why: 'the board folder is not there' });
     const top = await git(['rev-parse', '--show-toplevel'], start);
     if (!top.ok || !top.out) return set({ on: false, why: 'this board is not inside a git repo' });
-    repo = top.out;
+    // git answers with the path with every link resolved; the board was opened at the path
+    // somebody typed. Where any folder above it is a symlink, and on macOS /tmp and /var
+    // always are, the two disagree and every path below reads as outside the repo. Both
+    // sides are resolved so they can be compared at all.
+    repo = real(top.out);
     await learn();
     const head = await git(['rev-parse', '--abbrev-ref', 'HEAD'], repo);
     branch = head.ok ? head.out : '';
@@ -141,7 +150,13 @@ export function createHistory({ boardFile, studioRoot, log = () => {}, debounce 
   // Read with -z, so a file with a space or a quote in its name arrives whole.
   async function changedFiles() {
     if (!repo) return [];
-    const out = await git(['status', '--porcelain', '-z', '--untracked-files=all', '--', ...paths()], repo, { keep: true });
+    // Never run without a pathspec. To git an empty one means every file in the repo, so
+    // this would answer with somebody's unrelated work and `add` below would quietly do
+    // nothing, which is the exact opposite of the promise at the top of this file. If the
+    // board's own paths cannot be worked out, there is nothing here to commit.
+    const only = paths();
+    if (!only.length) return [];
+    const out = await git(['status', '--porcelain', '-z', '--untracked-files=all', '--', ...only], repo, { keep: true });
     const parts = (out.out || '').split('\0').filter(Boolean);
     const files = [];
     for (let i = 0; i < parts.length; i++) {
@@ -187,7 +202,9 @@ export function createHistory({ boardFile, studioRoot, log = () => {}, debounce 
       // repo whose board was new. So the board's own paths are added first, and only
       // those: `git add -- <paths>` leaves everything staged outside them exactly as it
       // was, which is the promise this file makes.
-      await git(['add', '--', ...paths()], repo);
+      const only = paths();
+      if (!only.length) return;
+      await git(['add', '--', ...only], repo);
       // `commit -- <files>` then commits those files and nothing else, so whatever else
       // somebody has staged is still staged afterwards.
       const made = await git(['commit', '--no-verify', '-m', `Design Book: ${subject}`, '--', ...files], repo);
@@ -210,6 +227,12 @@ export function createHistory({ boardFile, studioRoot, log = () => {}, debounce 
 
     async start() {
       if (!(await find())) return;
+      // Switched off: the repo has been found, so an existing history can still be listed
+      // and gone back to, but nothing is written on its own.
+      if (!saving) {
+        log('[design book] history is off (designbook.saveHistory), so nothing is committed');
+        return set({ on: false, why: 'history is off in settings (designbook.saveHistory)' });
+      }
       // Whatever was already different when the board opened is the first commit, so the
       // history starts from a known place rather than from whenever the next edit lands.
       await save('opened');
@@ -218,7 +241,7 @@ export function createHistory({ boardFile, studioRoot, log = () => {}, debounce 
     // Called whenever a board file changes. Held for a moment, because drawing writes a
     // file several times in a few seconds and each of those is not a thing to remember.
     touched() {
-      if (!state.on) return;
+      if (!saving || !state.on) return;
       clearTimeout(timer);
       timer = setTimeout(() => save(), debounce);
     },

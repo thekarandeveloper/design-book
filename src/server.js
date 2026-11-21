@@ -151,7 +151,12 @@ async function ensureServer(canvas) {
       env: nodeEnv({
         STUDIO_ROOT: canvas.root,
         REPO_ROOT: canvas.folder,
-        STUDIO_PORT: String(5273 + servers.size - 1)
+        STUDIO_PORT: String(5273 + servers.size - 1),
+        // Whether the board keeps its own history by committing as you draw. Read here
+        // rather than in the board, because the setting is the editor's and the board is
+        // a separate process that never sees it. Changing it takes a restart, which is
+        // what the setting's description says.
+        STUDIO_HISTORY: vscode.workspace.getConfiguration('designbook').get('saveHistory', true) ? 'on' : 'off'
       })
     });
     entry.proc = proc;

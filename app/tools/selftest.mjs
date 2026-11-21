@@ -13,10 +13,12 @@
 
 import fs from 'node:fs';
 import http from 'node:http';
+import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { AstroSource, astroMeta } from './astro.js';
 import { runSetup } from './setup.js';
+import { createHistory } from './history.js';
 import { readNativeTokens, tokenCss } from './native.js';
 
 const appDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -181,6 +183,68 @@ await runSetup({
 });
 ok('a board with no pages at all still gets one to look at',
   fs.existsSync(path.join(bare, '.designbook', 'pages', '01-screen.astro')));
+
+// ── the board's own history, and the switch that turns it off ─────────────
+//
+// The board commits its files as you draw. That is the point of the feature and a
+// surprise to anybody who did not ask for it, so `designbook.saveHistory` governs it and
+// off has to mean no commit at all, not a quieter one.
+
+console.log('\nThe board\'s history');
+const run = (args, cwd) => new Promise(done => {
+  const p = spawn('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = '';
+  p.stdout.on('data', d => { out += d; });
+  p.on('close', () => done(out.trim()));
+  p.on('error', () => done(''));
+});
+
+const hrepo = path.join(temp, 'history');
+fs.mkdirSync(path.join(hrepo, '.designbook', 'pages'), { recursive: true });
+await run(['init', '-q', '-b', 'main'], hrepo);
+await run(['config', 'user.email', 'selftest@example.com'], hrepo);
+await run(['config', 'user.name', 'selftest'], hrepo);
+fs.writeFileSync(path.join(hrepo, 'README.md'), 'a repo\n');
+await run(['add', '-A'], hrepo);
+await run(['commit', '-qm', 'first'], hrepo);
+const before = await run(['rev-list', '--count', 'HEAD'], hrepo);
+
+const board = path.join(hrepo, 'Board.designbook');
+const makeChange = n => {
+  fs.writeFileSync(board, JSON.stringify({ sections: [], n }));
+  fs.writeFileSync(path.join(hrepo, '.designbook', 'pages', '01-a.html'), `<p>${n}</p>`);
+};
+
+makeChange(1);
+const off = createHistory({ boardFile: board, studioRoot: path.join(hrepo, '.designbook'), saving: false });
+await off.start();
+ok('off: the board commits nothing', (await run(['rev-list', '--count', 'HEAD'], hrepo)) === before,
+  `was ${before}, now ${await run(['rev-list', '--count', 'HEAD'], hrepo)}`);
+ok('off: and says why', /off in settings/.test(off.state.why), off.state.why);
+ok('off: the work is still on disk', fs.existsSync(path.join(hrepo, '.designbook', 'pages', '01-a.html')));
+off.stop();
+
+const on = createHistory({ boardFile: board, studioRoot: path.join(hrepo, '.designbook'), saving: true, debounce: 30 });
+await on.start();
+ok('on: opening the board is the first commit', (await run(['rev-list', '--count', 'HEAD'], hrepo)) === String(Number(before) + 1),
+  `was ${before}, now ${await run(['rev-list', '--count', 'HEAD'], hrepo)}`);
+
+// The promise at the top of history.js: only the board's own files, named explicitly.
+// An empty pathspec means "everything" to git, so a board that cannot work out its own
+// paths used to answer with the whole repo and sweep up work that was not its own.
+fs.writeFileSync(path.join(hrepo, 'README.md'), 'somebody else was working here\n');
+makeChange(2);
+on.touched();
+await new Promise(r => setTimeout(r, 900));
+const touched = await run(['show', '--name-only', '--pretty=format:', 'HEAD'], hrepo);
+ok('on: and never commits a file that is not the board\'s', !/README/.test(touched), touched.replace(/\n/g, ' '));
+ok('on: while still committing its own', /01-a\.html/.test(touched), touched.replace(/\n/g, ' '));
+// Unstaged and uncommitted: `git diff` names a file only when the working tree differs
+// from the index, so naming it proves the board neither staged nor committed it.
+ok('the other work is left where it was, unstaged',
+  (await run(['diff', '--name-only', '--', 'README.md'], hrepo)) === 'README.md',
+  await run(['diff', '--name-only', '--', 'README.md'], hrepo));
+on.stop();
 
 // ── a page, compiled and served the way the board serves it ────────────────
 
