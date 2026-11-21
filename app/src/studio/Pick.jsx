@@ -4,6 +4,7 @@ import {
   rememberLook, getRemembered, savePicture, pictureUrl, getRefs, warmFrame
 } from './api.js';
 import { hit, labelOf, parentOf, childOf, onFrame, rematch, measure, promptFor, modelFor } from './pick.js';
+import { startText, extendText, textIn, clearText } from './selecttext.js';
 import { ImageDialog, AnnotateDialog, CompareDialog } from './Dialogs.jsx';
 import { windowOf, scanLocal, detailLocal, auditLocal } from './local.js';
 import { isScreenSize } from './frames.js';
@@ -493,9 +494,18 @@ export function usePick({ frame, inside, scrolled, say, onReload, onFit }) {
   const key = useCallback(ev => {
     if (!frame) return false;
     if (ev.key === 'Escape') {
+      if (textIn(frame.id)) { clearText(frame.id); return true; }
       if (dialog) { setDialog(null); return true; }
       if (snip) { setSnip(false); return true; }
       if (picks.length) { setPicks([]); return true; }
+      return false;
+    }
+    // Copying what is selected, before the rest of this bows out of modified keys. Only
+    // when something really is selected: with nothing selected, Cmd+C has to stay the
+    // editor's, or copying from a panel beside the board would stop working.
+    if ((ev.metaKey || ev.ctrlKey) && (ev.key === 'c' || ev.key === 'C')) {
+      const got = textIn(frame.id);
+      if (got) { ev.preventDefault(); copyText(got, 'text copied'); return true; }
       return false;
     }
     if (!live) return false;
@@ -504,7 +514,7 @@ export function usePick({ frame, inside, scrolled, say, onReload, onFit }) {
     if (ev.key === 'ArrowDown' && picks.length) { ev.preventDefault(); down(); return true; }
     if (ev.key === 's' || ev.key === 'S') { setSnip(on => !on); return true; }
     return false;
-  }, [frame, live, dialog, snip, picks.length, up, down]);
+  }, [frame, live, dialog, snip, picks.length, up, down, copyText]);
 
   return {
     frame, live, state, list, picks, setPicks, hover, setHover, alt, setAlt, snip, setSnip, snipped,
@@ -563,11 +573,30 @@ export function PickLayer({ pick, frame, onEnter }) {
   // The browser follows a drag's release with a click, and that click must not choose an
   // element over the region that was just cut.
   const snipped = useRef(false);
+  // A press that turned into a drag over words. Held so the click that follows the
+  // release chooses nothing: having just selected a sentence, the last thing you want is
+  // the paragraph outlined and your selection gone.
+  const selecting = useRef(null);
+  const selected = useRef(false);
   const [rubber, setRubber] = useState(null);
   const list = pick.list || [];
   const scroll = scrollOf(frame.id).y;
 
   const move = ev => {
+    // Dragging over words. Three pixels, because a press always wobbles a little and a
+    // click that selects one letter instead of choosing an element is a click that feels
+    // broken.
+    if (selecting.current) {
+      const at = onFrame(ref.current, frame, ev);
+      const from = selecting.current;
+      if (!selected.current && Math.abs(at.x - from.x) < 3 && Math.abs(at.y - from.y) < 3) return;
+      if (!selected.current) {
+        if (!startText(frame.id, from)) { selecting.current = null; return; }
+        selected.current = true;
+      }
+      extendText(frame.id, at);
+      return;
+    }
     if (drag.current) {
       const at = onFrame(ref.current, frame, ev);
       const d = drag.current;
@@ -584,6 +613,19 @@ export function PickLayer({ pick, frame, onEnter }) {
   };
 
   const down = ev => {
+    // This press may be the start of selecting text. Nothing is done to the page yet,
+    // because most presses are a click on an element and that must not clear what is
+    // already selected.
+    //
+    // Not gated on `pick.disabled`. That flag means the element scan is not ready, which
+    // is true for a second after every reload and for as long as a page is scrolled, and
+    // it has nothing to do with reading words off the screen. Gating on it made selection
+    // work or not depending on how soon after a reload you tried.
+    if (ev.button === 0 && !pick.snip) {
+      selecting.current = onFrame(ref.current, frame, ev);
+      selected.current = false;
+      try { ref.current.setPointerCapture(ev.pointerId); } catch (_) {}
+    }
     if (ev.button !== 0 || !pick.snip) return;
     ev.preventDefault();
     const at = onFrame(ref.current, frame, ev);
@@ -593,6 +635,18 @@ export function PickLayer({ pick, frame, onEnter }) {
   };
 
   const up = ev => {
+    if (selecting.current) {
+      selecting.current = null;
+      if (selected.current) {
+        // Tell the person it is theirs to copy. Without this the highlight looks like
+        // something the board did rather than something they can take.
+        const got = textIn(frame.id);
+        if (got) pick.say(frame.id, `${got.length} characters selected. Cmd+C copies them.`);
+        snipped.current = true;
+        setTimeout(() => { snipped.current = false; }, 400);
+      }
+      selected.current = false;
+    }
     if (!drag.current) return;
     const at = onFrame(ref.current, frame, ev);
     const d = drag.current;
@@ -609,6 +663,10 @@ export function PickLayer({ pick, frame, onEnter }) {
   const click = ev => {
     if (ev.button !== 0 || pick.snip || pick.disabled || snipped.current) return;
     ev.stopPropagation();
+    // A plain click chooses an element, so whatever was selected is no longer what you
+    // are looking at. Left behind it is a highlight with nothing to do with the outline
+    // now on screen.
+    clearText(frame.id);
     pick.choose(pick.under(ref.current, ev), ev.shiftKey || ev.metaKey || ev.ctrlKey);
   };
 

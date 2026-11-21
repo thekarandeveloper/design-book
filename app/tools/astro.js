@@ -307,6 +307,15 @@ export class AstroSource {
     // A frame is a picture of a screen, and a screen has no scrollbar down its side. Last in
     // the head, so a page's own rule cannot put one back. The page still scrolls.
     head.push('<style data-designbook="bars">html{scrollbar-width:none!important}html::-webkit-scrollbar,body::-webkit-scrollbar{width:0!important;height:0!important}</style>');
+    // Selected text has to look selected.
+    //
+    // The board drives the selection from its own layer over the frame, so the page is
+    // never the focused document, and a browser paints an unfocused selection in a grey
+    // so faint it reads as nothing happening. Naming ::selection makes it paint properly
+    // whether the page has focus or not. Hard-coded rather than taken from the board's
+    // accent, because this is a style sheet on somebody else's page and the one thing it
+    // must not do is depend on a variable that page has never heard of.
+    head.push('<style data-designbook="selection">::selection{background:#3F7FFF59;color:inherit}</style>');
     const inject = head.join('');
     html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, inject + '</head>') : inject + html;
     return { status: res.status, html };

@@ -351,6 +351,14 @@ import Text from '@kit/base/Text.astro';
   ok('and editing it shows on the next render', /display:flex/.test(restyled.html.replace(/\s+/g, '')),
     (restyled.html.match(/\.hdr[^}]{0,60}}/) || ['not on the page'])[0]);
 
+  // Selected text has to look selected. The board drives the selection from its own layer
+  // over the frame, so the page is never the focused document, and an unfocused selection
+  // is painted in a grey faint enough to read as nothing having happened. Naming
+  // ::selection is what makes it show. Without this line the feature works and looks
+  // broken, which is the worst of both.
+  ok('a page is told how to paint selected text', /::selection\{background:/.test(one.html),
+    (one.html.match(/data-designbook="selection"[^<]{0,60}/) || ['no selection style on the page'])[0]);
+
   const two = await get('/02-android');
   ok('an Android page answers', two.status === 200);
   ok('at its own size', /designbook-width" content="382"/.test(two.html),
