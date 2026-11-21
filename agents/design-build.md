@@ -11,3 +11,5 @@ You make a UI change from a Design Book prompt. The prompt names the frame, the 
 3. Keep to the scope of the prompt. A change nobody asked for is not part of it.
 4. When the change is about layout, check it holds at 390, 768 and 1440 wide: `curl -s -X POST localhost:$(cat .designbook/.port)/__api/check -H 'Content-Type: application/json' -d '{"page":"<frame id from the prompt>"}'`.
 5. Reply with the files changed and one line on each. No dashes as pauses, no emojis.
+
+If the board itself misbehaves on the way, a change that does not show up or a workaround you had to invent, record it in one line and carry on: `"$HOME/.designbook-note" "what happened"`. Do not stop to fix the tool.

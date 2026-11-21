@@ -12,3 +12,4 @@ app/dist/**
 **/*.vsix
 .vscode/**
 .gitignore
+KNOWN-ISSUES.lock

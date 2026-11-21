@@ -308,7 +308,13 @@ export async function runSetup({ repoRoot, studioRoot, boardFile, name, canCompi
   // Swift into a frame. The board would then open empty, which reads as broken rather than as
   // new. So it gets one page, written in components, which is both a frame to look at and the
   // shape of the next one somebody writes.
-  if (!made.length && !drawn.length) {
+  //
+  // "Nothing on it" has to mean the pages folder is empty, not that this pass converted
+  // nothing. Converting nothing is the normal case for a board that is already set up: every
+  // frame on it was written by hand, and a second pass finds no route to turn into one. The
+  // old test wrote the starter into those folders, where a placeholder screen sits unlisted
+  // among real work and reads as something somebody forgot to finish (KNOWN-ISSUES.md 8).
+  if (!made.length && !drawn.length && !hasPages(inStudio('pages'))) {
     const first = inStudio('pages', '01-screen.astro');
     if (!fs.existsSync(first)) {
       fs.mkdirSync(inStudio('pages'), { recursive: true });
@@ -912,6 +918,16 @@ function highestSerial(dir) {
     if (m && /\.(html|astro)$/.test(file)) top = Math.max(top, Number(m[1]));
   }
   return String(top).padStart(2, '0');
+}
+
+// Whether a board already has pages of its own, whatever they are written in: `.json` is
+// the visual editor's, `.html` a converted route, `.astro` one written by hand.
+function hasPages(dir) {
+  try {
+    return fs.readdirSync(dir).some(f => /\.(html|astro|json)$/.test(f));
+  } catch (_) {
+    return false;
+  }
 }
 
 function freeName(dir, file) {

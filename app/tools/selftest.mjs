@@ -16,6 +16,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { AstroSource, astroMeta } from './astro.js';
+import { runSetup } from './setup.js';
 import { readNativeTokens, tokenCss } from './native.js';
 
 const appDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -145,6 +146,41 @@ ok('a colour role is followed to its hex', !!native && native.roles.some(r => r.
 const css = tokenCss(native);
 ok('and comes out as the kit reads it', /--db-primary: #2E7BF6/.test(css), css.slice(0, 120));
 ok('a size comes with it', /--db-screen-x: 24px/.test(css));
+
+// ── setting up a board that is already set up ──────────────────────────────
+//
+// Running setup again is the normal case: the board is opened, the repo is read, and a
+// board whose frames were all written by hand has no route to convert. That used to be
+// read as "this board is empty" and earned a starter page, dropped unlisted among real
+// work (KNOWN-ISSUES.md 8).
+
+console.log('\nSetting up again');
+const setupSays = () => {};
+await runSetup({
+  repoRoot: path.join(temp, 'board'),
+  studioRoot: path.join(temp, 'board', '.designbook'),
+  boardFile: path.join(temp, 'board', 'Board.designbook'),
+  name: 'Board',
+  canCompile: true,
+  say: setupSays
+});
+ok('a board that already has pages gets no starter page',
+  !fs.existsSync(path.join(pages, '01-screen.astro')),
+  fs.readdirSync(pages).join(' '));
+ok('and keeps the pages it had', fs.existsSync(path.join(pages, '01-one.astro')));
+
+const bare = path.join(temp, 'bare');
+fs.mkdirSync(path.join(bare, '.designbook'), { recursive: true });
+await runSetup({
+  repoRoot: bare,
+  studioRoot: path.join(bare, '.designbook'),
+  boardFile: path.join(bare, 'Board.designbook'),
+  name: 'Bare',
+  canCompile: true,
+  say: setupSays
+});
+ok('a board with no pages at all still gets one to look at',
+  fs.existsSync(path.join(bare, '.designbook', 'pages', '01-screen.astro')));
 
 // ── a page, compiled and served the way the board serves it ────────────────
 

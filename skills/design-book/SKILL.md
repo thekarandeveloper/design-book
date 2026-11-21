@@ -612,3 +612,11 @@ one afternoon because a check came back with nothing new and the picture was nev
 
 `KNOWN-ISSUES.md` in this repo says which of those silent failures are the tool's own,
 with the workaround for each. Read it when a change does not show up.
+
+And when you hit one that is not in it, add it as you go:
+
+    "$HOME/.designbook-note" "the frame kept drawing the old styles after three saves"
+
+One line, once, then carry on with the design. The list is what gets read before the next
+fault is fixed, so a fault nobody wrote down is a fault nobody fixes. Only what the board
+did, never a mistake of your own.

@@ -80,6 +80,16 @@ function pointerBlock(canvas, native) {
       'the design system read out of it, every value resolved.',
       ''
     ] : []),
+    '**When the board itself misbehaves, write it down and carry on.** A frame that will not',
+    'update, a style that does not apply, an endpoint that answers wrongly, a poster that stays',
+    'stale, a workaround you had to invent because the tool would not do it straight:',
+    '',
+    '    "$HOME/.designbook-note" "what happened, and what did not fix it"',
+    '',
+    'One line, once, then keep working. Only what the board did, never a mistake of your own,',
+    'and never stop the job to go and fix the extension. It lands in Design Book\'s own list of',
+    'known faults, which is what gets read before the next one is fixed.',
+    '',
     'The rest of the house rules are in the `design-book` skill, which loads itself when there',
     'is designing to do.',
     POINTER_END
@@ -99,8 +109,28 @@ function claudeHome(canvas) {
   return canvas.folder;
 }
 
+// `note.sh` is run from other repos, by sessions that have no idea where this extension
+// lives, so it is reached through one stable name in the home folder. Made here because
+// this is the moment the rule that calls it is written into a repo: the two cannot drift.
+function ensureNoteLink() {
+  const link = path.join(os.homedir(), '.designbook-note');
+  const real = path.join(state.extensionPath, 'note.sh');
+  try {
+    if (!fs.existsSync(real)) return;
+    if (fs.realpathSync(link) === fs.realpathSync(real)) return;
+  } catch (_) {}
+  try {
+    fs.rmSync(link, { force: true });
+    fs.symlinkSync(real, link);
+    log(`[design book] ~/.designbook-note now points at ${real}`);
+  } catch (err) {
+    log(`[design book] could not link ~/.designbook-note: ${err.message}`);
+  }
+}
+
 // Written once and kept up to date in place, so running it again never stacks up copies.
 function ensureClaudeContext(canvas) {
+  ensureNoteLink();
   const file = path.join(claudeHome(canvas), 'CLAUDE.md');
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch (_) {}
@@ -191,4 +221,4 @@ async function askClaude(canvas, pageFile) {
   );
 }
 
-module.exports = { ensureClaudeContext, askClaude, hasClaudeCode, pointerBlock, claudeHome, isNative };
+module.exports = { ensureClaudeContext, ensureNoteLink, askClaude, hasClaudeCode, pointerBlock, claudeHome, isNative };

@@ -10,3 +10,5 @@ You make one small change to a UI file, from a Design Book prompt. The prompt na
 2. Make the smallest edit that does it. Where the prompt names a token, such as `color #111 (--foreground)`, use the token, never a new hard-coded value.
 3. If the file or line is missing, or the change needs a second file, stop and say so in one sentence so the main session can take over.
 4. Reply in two lines: the file and line, and what changed. No dashes as pauses, no emojis.
+
+If the board itself misbehaves on the way, a change that does not show up or a workaround you had to invent, record it in one line and carry on: `"$HOME/.designbook-note" "what happened"`. Do not stop to fix the tool.

@@ -31,8 +31,17 @@ remove_old() {
   done
 }
 
+# What a session in any other repo runs to record a fault in the board. One stable name,
+# so nothing anywhere has to know where this folder is. The extension makes it too, every
+# time it writes its rules into a repo.
+note_link() {
+  ln -sfn "$here/note.sh" "$HOME/.designbook-note"
+  echo "linked $HOME/.designbook-note"
+}
+
 case "${1:-install}" in
   install)
+    note_link
     for dir in "${targets[@]}"; do
       remove_old "$dir"
       rm -rf "$dir/$name"
@@ -43,6 +52,7 @@ case "${1:-install}" in
     echo 'Now reload VS Code: Cmd+Shift+P, "Developer: Reload Window".'
     ;;
   uninstall)
+    [ -L "$HOME/.designbook-note" ] && rm -f "$HOME/.designbook-note" && echo "removed $HOME/.designbook-note"
     for dir in "${targets[@]}"; do
       remove_old "$dir"
       rm -rf "$dir/$name"

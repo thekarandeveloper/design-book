@@ -8,3 +8,6 @@
 node_modules/
 app/dist/
 .DS_Store
+
+# note.sh locks the issue log while it appends.
+KNOWN-ISSUES.lock

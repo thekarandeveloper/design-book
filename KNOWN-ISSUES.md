@@ -4,6 +4,11 @@ Found while designing with the board, not while building it. Each one cost real 
 real job, so each one is written as what happened, what it looked like, and what to do
 until it is fixed.
 
+The numbered items are the written-up ones, worst first. Under **Captured** at the bottom
+are the raw ones, put there by `note.sh` from whatever repo the fault happened in, which
+is how a fault gets recorded the moment it bites rather than being remembered later. One
+gets cleared each weekend: promote it to a number, fix it, release.
+
 ## 1. A page's `<style>` stops being rebuilt
 
 **The worst one.** Edit the markup in a `.designbook/pages/*.astro` file and the frame
@@ -135,15 +140,26 @@ Deleting it through `POST /__api/frame/delete` works, but the id is `exp:01-scre
 file path returns `{"error":"no such frame"}`, which reads as "this frame does not exist"
 rather than "that is not how you name it".
 
-Unconfirmed: whether every open does this, or only the first on a board the extension has
-not seen before.
+**Fixed on 2026-11-21.** The guard asked whether *this pass* had converted anything, and
+converting nothing is the normal case for a board whose frames were all written by hand. It
+now asks whether the `pages/` folder is empty, which is what "a board with nothing on it"
+was always meant to mean. `app/tools/setup.js`, and two tests in `app/tools/selftest.mjs`
+hold it: a board that already has pages gets no starter, a board with none still gets one.
 
-Suggested fix: do not write a starter page into a `pages/` that already has pages. And
-accept a frame's `file` wherever its id is accepted, since that is the string the API hands
-out.
+Still open, and the reason this item stays: a frame's `file` is not accepted where its id
+is. `/__api/studio` hands out `pages/01-screen.astro`, `POST /__api/frame/delete` wants
+`exp:01-screen`, and passing the first returns `{"error":"no such frame"}`, which reads as
+"this frame does not exist" rather than "that is not how you name it".
 
 ---
 
 Items 1 to 6 written 2026-11-15 from the Sakhi iOS board, while drawing three options for
 the calendar sheet's month header. Items 7 and 8 written 2026-11-19 from the AppKit board
 in `07-Dev-Kit`, while redrawing all 57 of its screens.
+
+## Captured
+
+Written here by `note.sh` from whatever repo the board was being used in, so a fault is
+recorded the moment it bites instead of being remembered later. Raw on purpose. Fixing one
+means promoting it: give it a number above, say what it looked like and what did not fix
+it, then delete it from here.
