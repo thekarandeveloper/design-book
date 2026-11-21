@@ -1,0 +1,155 @@
+---
+// The round button an app puts in the corner of a screen.
+//
+// Back, close, and the one that opens a setting: on iOS they are the same shape, a disc
+// with a glyph in the middle of it, and every board page was drawing its own. Each page
+// picked a slightly different size and a slightly different fill, so the same button was
+// four buttons across one board and nobody could say which was right.
+//
+// The three fills are the three an app really uses:
+//   `tint`     a wash of the app's own colour, which is what a pink screen uses
+//   `neutral`  the system's fill, for a button on a plain background
+//   `glass`    `.regularMaterial`, for a button floating over a photograph
+//
+// 44 is the size every platform agrees a target has to be, and it is `DSBackButton`'s own.
+
+interface Props {
+  /** The two every app has, with the app's own numbers already in them: `back` is
+   *  `chevron.left` at 15 bold, `close` is `xmark` at 13 bold, and both are the glass
+   *  circle `DS.Buttons.Back` and `DS.Buttons.Close` draw on the current iOS. A page says
+   *  one word and gets the right button. */
+  kind?: 'back' | 'close';
+  /** The SF Symbols name, so whoever builds it reads the name rather than the picture. */
+  icon?: string;
+  /** 44 unless the app says otherwise. A floating one over a photo is often 40. */
+  size?: number;
+  /** The glyph, in the 24 unit box the icons are drawn in. */
+  glyph?: number;
+  weight?: number;
+  fill?: 'tint' | 'neutral' | 'glass' | 'none';
+  /** The glyph's colour. The app's own, unless a screen says otherwise. */
+  color?: string;
+  label?: string;
+}
+
+// `DS.Buttons.Back` and `DS.Buttons.Close`: a 30 glyph box with 7 of padding, so 44, on
+// `.glassEffect(.regular, in: Circle())`, with the glyph in the app's own colour.
+const KIND = {
+  back: { icon: 'chevron.left', glyph: 15, weight: 2.8, fill: 'glass', label: 'Go back' },
+  close: { icon: 'xmark', glyph: 13, weight: 2.8, fill: 'glass', label: 'Dismiss' }
+};
+
+const props = Astro.props;
+const preset = props.kind ? KIND[props.kind] : null;
+
+const {
+  icon = preset ? preset.icon : 'chevron.left',
+  size = 44,
+  glyph = preset ? preset.glyph : 17,
+  weight = preset ? preset.weight : 2.6,
+  fill = preset ? preset.fill : 'tint',
+  color = 'var(--db-primary, #F61887)',
+  label = preset ? preset.label : undefined
+} = props;
+
+import Icon from '../base/Icon.astro';
+---
+
+<span
+  class="circle"
+  data-fill={fill}
+  style={`--size: ${size}px`}
+  role={label ? 'button' : undefined}
+  aria-label={label}
+>
+  <slot><Icon name={icon} size={glyph} weight={weight} color={color} /></slot>
+</span>
+
+<style>
+  .circle {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: var(--size);
+    height: var(--size);
+    border-radius: var(--db-radius-full, 999px);
+  }
+
+  /* A wash of the app's own colour. */
+  .circle[data-fill='tint'] {
+    background: var(--db-surface-raised, color-mix(in srgb, var(--db-primary, #F61887) 10%, transparent));
+  }
+
+  /* `systemFill`, for a button that is not on a tinted screen. */
+  .circle[data-fill='neutral'] {
+    background: var(--db-fill, rgba(120, 120, 128, 0.2));
+  }
+
+  /* `.glassEffect(.regular, in: Circle())`, which is what the current iOS draws.
+     The numbers are `liquid-glass-react`'s own (github.com/rdev/liquid-glass-react), which
+     works the effect out from Apple's: a pane the background is blurred and saturated
+     through, a ring round the edge carrying a sheen where the light bends, and a highlight
+     at the top. Written here as three layers rather than as that library's React, because
+     the kit has no React in it and the page is a picture, not an app.
+
+     Its displacement map is left out on purpose. The refraction is an SVG filter over a
+     generated shader image, and at 44 across there is nothing of it to see; the ring and
+     the sheen are what read as glass at this size. */
+  .circle[data-fill='glass'] {
+    position: relative;
+    isolation: isolate;
+    background: var(--db-material, rgba(255, 255, 255, 0.28));
+    /* `(overLight ? 12 : 4) + blurAmount * 32` at the library's own defaults, over a light
+       screen, which is where a navigation button sits. */
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  }
+
+  /* The edge. A 1.5 ring, masked so only the ring is drawn, holding the sheen: nothing at
+     the top left, brightening through the middle, gone again at the bottom right. */
+  .circle[data-fill='glass']::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.12) 33%,
+      rgba(255, 255, 255, 0.4) 66%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    box-shadow:
+      inset 0 0 0 0.5px rgba(255, 255, 255, 0.5),
+      inset 0 1px 3px rgba(255, 255, 255, 0.25),
+      0 1px 4px rgba(0, 0, 0, 0.35);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+    pointer-events: none;
+  }
+
+  /* The light on the top of it. */
+  .circle[data-fill='glass']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-image: radial-gradient(
+      circle at 50% 0%,
+      rgba(255, 255, 255, 0.5) 0%,
+      rgba(255, 255, 255, 0) 50%
+    );
+    pointer-events: none;
+  }
+
+  /* The glyph sits over both of them. */
+  .circle[data-fill='glass'] > :global(*) {
+    position: relative;
+    z-index: 1;
+  }
+
+  .circle[data-fill='none'] { background: transparent; }
+</style>

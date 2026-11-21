@@ -103,6 +103,20 @@ const MOST = 4;
 
 async function ensureServer(canvas) {
   if (!canvas) return 0;
+  const appDir = path.join(state.extensionPath, 'app');
+
+  // The folder this window runs from is gone: it was updated, moved or renamed while the
+  // window was open. A server started before that is still listening, and answers, while
+  // reading its files out of a folder that no longer exists, so the board that trusted it
+  // came up blank and said nothing. It is not trusted, and the one thing that fixes it is
+  // said out loud.
+  const gone = appGone(appDir);
+  if (gone) {
+    vscode.window.showErrorMessage(gone);
+    log(`[design book] ${gone}`);
+    return 0;
+  }
+
   const existing = servers.get(canvas.root);
   if (existing) existing.used = Date.now();
   if (existing?.port && await alive(existing.port)) return existing.port;
@@ -110,7 +124,6 @@ async function ensureServer(canvas) {
 
   retireIdle();
 
-  const appDir = path.join(state.extensionPath, 'app');
   if (!isDir(path.join(appDir, 'node_modules'))) {
     const done = await install(appDir);
     if (!done) return 0;
@@ -152,12 +165,44 @@ async function ensureServer(canvas) {
       resolve(port);
     };
 
+    // The board's address is the one the board answers on, not the first one printed.
+    //
+    // Everything this process starts writes to the same output, and the project's own dev
+    // server is usually first: a board with a Next site behind it printed
+    // "Local: http://localhost:3002" seconds before Vite printed its own line, so the tab
+    // was pointed at the project's site instead of the board and the board never came up.
+    // A board with no live site, like one whose pages are all written on it, was never
+    // affected, which is why one board opened and another did not.
+    //
+    // So every localhost port the output mentions is a candidate, and the one taken is the
+    // first that answers the board's own API. That also covers the other half of it:
+    // printing an address and being able to answer on it are not the same moment.
+    const candidates = [];
+    let looking = false;
+
+    const look = async () => {
+      if (looking) return;
+      looking = true;
+      const until = Date.now() + 40000;
+      while (!settled && Date.now() < until) {
+        for (const port of [...candidates]) {
+          if (settled) return;
+          if (await alive(port)) return done(port);
+        }
+        await new Promise(r => setTimeout(r, 500));
+      }
+      looking = false;
+    };
+
     const onData = chunk => {
       const text = String(chunk);
       // Streamed as it comes, without a line break of our own.
       if (state.log) state.log.append(text);
-      const m = text.match(/localhost:(\d+)/);
-      if (m) done(Number(m[1]));
+      for (const m of text.matchAll(/localhost:(\d+)/g)) {
+        const port = Number(m[1]);
+        if (port && !candidates.includes(port)) candidates.push(port);
+      }
+      if (candidates.length) look();
     };
     proc.stdout.on('data', onData);
     proc.stderr.on('data', onData);
@@ -167,8 +212,11 @@ async function ensureServer(canvas) {
       done(0);
     });
     setTimeout(() => {
-      if (!settled) { log('[design book] no ready line after 30s, see the log'); done(0); }
-    }, 30000);
+      if (!settled) {
+        log('[design book] the board server did not answer after 45s, see the log');
+        done(0);
+      }
+    }, 45000);
   });
 }
 

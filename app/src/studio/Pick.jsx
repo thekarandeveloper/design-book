@@ -3,7 +3,7 @@ import {
   scanFrame, elementDetail, auditElement, shotOf, shotRegion, shotStatesOf, shotSizesOf,
   rememberLook, getRemembered, savePicture, pictureUrl, getRefs, warmFrame
 } from './api.js';
-import { hit, labelOf, parentOf, childOf, onFrame, rematch, measure, promptFor, modelFor, TEMPLATES } from './pick.js';
+import { hit, labelOf, parentOf, childOf, onFrame, rematch, measure, promptFor, modelFor } from './pick.js';
 import { ImageDialog, AnnotateDialog, CompareDialog } from './Dialogs.jsx';
 import { windowOf, scanLocal, detailLocal, auditLocal } from './local.js';
 import { isScreenSize } from './frames.js';
@@ -28,7 +28,15 @@ function scrollOf(frameId) {
   const node = document.querySelector(`.st-world > .st-frame[data-id="${CSS.escape(frameId)}"] iframe`);
   if (!node) return { y: 0, known: true };
   try {
-    void node.contentWindow.document;
+    const doc = node.contentWindow.document;
+    // The box that scrolls, not the window.
+    //
+    // A page behind glass scrolls inside a box of the screen's size; the window around
+    // it barely moves. Reading the window gave nearly zero however far the page had been
+    // scrolled, so every outline the picker drew stayed where the page had been when it
+    // was first looked at, and clicking picked whatever was at the top.
+    const box = doc.querySelector('[data-scrolls]');
+    if (box) return { y: box.scrollTop || 0, known: true };
     return { y: node.contentWindow.scrollY || 0, known: true };
   } catch (_) {
     return { y: 0, known: false };
@@ -356,11 +364,18 @@ export function usePick({ frame, inside, scrolled, say, onReload, onFit }) {
       });
     },
     async annotate(mode) {
+      const f = S.current.frame;
+      if (!f) return;
       const list = S.current.picks;
-      if (!list.length) return;
       await working('Taking the picture...', async () => {
-        const shot = await pictureOf(list, mode || 'context');
-        if (shot.error) return say(S.current.frame.id, shot.error);
+        // Whatever is chosen. An element or a region if one is chosen, and the whole
+        // frame if none is: pressing Annotate with a frame selected means that frame,
+        // and refusing because nothing inside it was clicked would be the board being
+        // pedantic about its own idea of a selection.
+        const shot = list.length
+          ? await pictureOf(list, mode || 'context')
+          : await shotRegion(f.id, { x: 0, y: 0, w: f.width, h: f.height, label: f.title });
+        if (shot.error) return say(f.id, shot.error);
         setDialog({ type: 'annotate', name: shot.name, file: shot.file });
       });
     },
@@ -674,68 +689,49 @@ export function PickLayer({ pick, frame, onEnter }) {
 
 // ── the panel ───────────────────────────────────────────────────────────────
 
-export function PickPanel({ pick }) {
-  const { picks, details, issues, thumb, note, reference, busy, remembered, actions } = pick;
+// What is known about what was chosen, as a section of the frame's own panel.
+//
+// It used to be a second floating box beside the first, and two boxes over a board is one
+// too many: the same frame was being described in two places, each with its own header and
+// its own close button. This returns the content, and `Inspector` puts it where the rest
+// of what is known about that frame already is.
+export function PickBody({ pick }) {
+  const { picks, details, note, reference, busy, remembered, actions } = pick;
   const [more, setMore] = useState(false);
   if (!picks.length || !pick.frame) return null;
 
   const lead = picks[0];
   const region = lead.kind === 'region';
   const d = !region && picks.length === 1 ? details[lead.i] : null;
-  const found = picks.flatMap(p => (p.kind === 'el' ? issues[p.i] || [] : []));
   const sourceOf = d && d.source;
-  const s = (d && d.style) || {};
-  const t = (d && d.tokens) || {};
-  const named = (v, k) => (t[k] ? `${v}  ${t[k]}` : v);
   const title = picks.length > 1 ? `${picks.length} chosen` : region ? 'Region' : labelOf(lead.el);
   const mine = remembered.filter(Boolean);
   const model = modelFor({ picks, details, note, fileKnown: /^(canvas:|exp:)/.test(pick.frame.id) });
 
   return (
-    <div className="st-pickpanel" onPointerDown={e => e.stopPropagation()} onWheel={e => e.stopPropagation()}>
-      <header>
+    <div className="st-el">
+      <div className="st-el-head">
         <b title={title}>{title}</b>
         <button className="st-x" title="Choose nothing (Escape)" onClick={() => pick.setPicks([])}>&times;</button>
-      </header>
-
-      <div className="st-pickpanel-thumb">
-        {thumb && thumb.key === picks.map(p => p.kind === 'region' ? `r${p.rect.x},${p.rect.y},${p.rect.w},${p.rect.h}` : p.i).join('|')
-          ? <img src={pictureUrl(thumb.name)} alt="" draggable={false} />
-          : <span>Taking its picture...</span>}
       </div>
 
       {sourceOf ? (
-        <button className="st-pickpanel-source" title="Open this line in the editor" onClick={() => actions.openFile(d)}>
+        <button className="st-el-source" title="Open this line in the editor" onClick={() => actions.openFile(d)}>
           {sourceOf.file}{sourceOf.line ? `:${sourceOf.line}` : ''}
           {d.components && d.components[0] ? <em>{d.components[0]}</em> : null}
         </button>
       ) : null}
 
-      {d ? (
-        <dl className="st-pickpanel-facts">
-          <dt>Size</dt><dd>{Math.round(d.rect.w)} x {Math.round(d.rect.h)}</dd>
-          {s.size ? (<><dt>Type</dt><dd>{s.font ? s.font + ' ' : ''}{s.size}{s.lineHeight ? ' / ' + s.lineHeight : ''} {s.weight}</dd></>) : null}
-          {s.color ? (<><dt>Colour</dt><dd><i className="st-sw" style={{ background: s.color }} />{named(s.color, 'color')}</dd></>) : null}
-          {s.background ? (<><dt>Fill</dt><dd><i className="st-sw" style={{ background: s.background }} />{named(s.background, 'background')}</dd></>) : null}
-          {s.radius ? (<><dt>Radius</dt><dd>{named(s.radius, 'radius')}</dd></>) : null}
-          {s.padding ? (<><dt>Padding</dt><dd>{s.padding}</dd></>) : null}
-          {s.gap ? (<><dt>Gap</dt><dd>{named(s.gap, 'gap')}</dd></>) : null}
-        </dl>
-      ) : null}
+      {/* The size on its own, because it is the one fact that is about the thing rather
+          than about its stylesheet, and it is one short line. Everything else that used to
+          be here, the type, the colours, the padding, and the contrast lines under them,
+          is gone: Claude reads the page, and reading its own computed style back to the
+          person was a wall in front of the two buttons they came for. What is wrong with
+          the frame is still in "to look at" above, where it belongs. */}
+      {d ? <p className="st-el-size">{Math.round(d.rect.w)} &times; {Math.round(d.rect.h)}</p> : null}
 
-      {found.length ? (
-        <ul className="st-pickpanel-issues">
-          {found.slice(0, 4).map((i, n) => <li key={n} className={i.severity === 'bad' ? 'is-bad' : ''}><b>{i.kind}</b> {i.detail}</li>)}
-        </ul>
-      ) : null}
-
-      <div className="st-pickpanel-templates">
-        {TEMPLATES.filter(([label]) => label !== 'Match reference' || reference).map(([label, line]) => (
-          <button key={label} onClick={() => pick.setNote(n => (n ? n.replace(/\s*$/, ' ') : '') + line)}>{label}</button>
-        ))}
-      </div>
       <textarea
-        className="st-pickpanel-note"
+        className="st-el-note"
         placeholder="What should change? Goes in the prompt."
         value={note}
         rows={2}
@@ -744,7 +740,7 @@ export function PickPanel({ pick }) {
       />
 
       {reference ? (
-        <div className="st-pickpanel-ref">
+        <div className="st-el-ref">
           <img src={reference.url} alt="" />
           <span>{reference.name}</span>
           <button className="st-x" title="Take the reference away" onClick={actions.clearReference}>&times;</button>
@@ -752,31 +748,33 @@ export function PickPanel({ pick }) {
       ) : null}
 
       {model ? (
-        <div className="st-pickpanel-model" title={`Why: ${model.reason}.`}>
+        <div className="st-el-model" title={`Why: ${model.reason}.`}>
           <span>{model.agent ? <>Goes to <b>{model.agent}</b> ({model.name})</> : <>Needs <b>{model.name}</b></>}</span>
           <button onClick={() => pick.copyText(model.command, `${model.command} copied`)} title="To switch the session itself instead">{model.command}</button>
         </div>
       ) : null}
 
-      <div className="st-row">
-        <button className="st-btn st-btn--go" disabled={!!busy} onClick={() => actions.copyPicture()} title="The picture, on the clipboard, to paste into Claude">Copy screenshot</button>
-        <button className="st-btn" disabled={!!busy} onClick={() => actions.copyPrompt()} title="Where it is, the file and line, what it looks like, your note">Copy prompt</button>
-      </div>
-      <button className="st-btn" disabled={!!busy} onClick={() => actions.copyBoth()} title="The picture and the words on the clipboard together. A chat box takes the picture; an editor takes the words.">
+      {/* The one most people want is the one that fills the row. The other two wrap under
+          it in the same button as everything else in the panel. */}
+      <button className="st-el-go" disabled={!!busy} onClick={() => actions.copyBoth()} title="The picture and the words on the clipboard together. A chat box takes the picture; an editor takes the words.">
         Copy both
       </button>
+      <div className="st-acts">
+        <button className="st-act" disabled={!!busy} onClick={() => actions.copyPicture()} title="The picture, on the clipboard, to paste into Claude">Screenshot</button>
+        <button className="st-act" disabled={!!busy} onClick={() => actions.copyPrompt()} title="Where it is, the file and line, what it looks like, your note">Prompt</button>
+      </div>
       {busy ? <p className="st-note-line">{busy}</p> : null}
 
-      <button className="st-pickpanel-more" onClick={() => setMore(m => !m)}>{more ? 'Less' : 'More'}</button>
+      <button className="st-el-more" onClick={() => setMore(m => !m)}>{more ? 'Less' : 'More'}</button>
       {more ? (
-        <div className="st-pickpanel-extra">
-          {!region ? <button className="st-btn" disabled={!!busy} onClick={() => actions.copyPicture(undefined, 'context')}>Screenshot in context</button> : null}
-          <button className="st-btn" disabled={!!busy} onClick={() => actions.annotate()}>Annotate</button>
-          {!region && picks.length === 1 ? <button className="st-btn" disabled={!!busy} onClick={actions.states}>States</button> : null}
-          {!region && picks.length === 1 ? <button className="st-btn" disabled={!!busy} onClick={actions.sizes}>3 widths</button> : null}
-          <button className="st-btn" disabled={!!busy} onClick={actions.chooseReference}>Reference</button>
-          {!region && picks.length === 1 ? <button className="st-btn" disabled={!!busy} onClick={actions.remember}>Remember look</button> : null}
-          {mine.length ? <button className="st-btn" onClick={() => actions.compare(mine[0].id)} title={mine[0].label}>Compare with before</button> : null}
+        <div className="st-acts">
+          {!region ? <button className="st-act" disabled={!!busy} onClick={() => actions.copyPicture(undefined, 'context')}>Screenshot in context</button> : null}
+          <button className="st-act" disabled={!!busy} onClick={() => actions.annotate()}>Annotate</button>
+          {!region && picks.length === 1 ? <button className="st-act" disabled={!!busy} onClick={actions.states}>States</button> : null}
+          {!region && picks.length === 1 ? <button className="st-act" disabled={!!busy} onClick={actions.sizes}>3 widths</button> : null}
+          <button className="st-act" disabled={!!busy} onClick={actions.chooseReference}>Reference</button>
+          {!region && picks.length === 1 ? <button className="st-act" disabled={!!busy} onClick={actions.remember}>Remember look</button> : null}
+          {mine.length ? <button className="st-act" onClick={() => actions.compare(mine[0].id)} title={mine[0].label}>Compare with before</button> : null}
         </div>
       ) : null}
     </div>

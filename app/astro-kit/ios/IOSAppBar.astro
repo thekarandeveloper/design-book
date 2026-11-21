@@ -1,0 +1,90 @@
+---
+// The bar an app draws at the top of its own screen.
+//
+// Not `IOSNavBar`, which is the system's: that one is 44 tall, has a back chevron with a
+// label beside it, and a hairline under it. This is the other thing, the one most apps
+// actually build: a round button in the corner, the title on the middle of the screen, and
+// whatever else on the right.
+//
+// It exists because the position was being set by hand on every screen. The button is in
+// the corner, the title is centred on the SCREEN and not on what is left beside the button,
+// and the three paddings are the app's own. Written out per page, each page drifted: a
+// title centred between the button and the edge sits a few points off, and nobody notices
+// until two frames are next to each other.
+//
+// Measured off `DSNavBar`: the title is 17 bold in the label colour, the row is inset by the
+// screen's own margin, 20 above and 8 below, and the leading button is `DSBackButton` or
+// `DSCloseButton`, which are the same glass circle.
+
+interface Props {
+  /** Which button is in the corner. Leave it out for a bar with no way back. */
+  kind?: 'back' | 'close';
+  title?: string;
+  /** How far in the row starts. The app's own screen margin, which for Sakhi is 24:
+   *  measured off a photograph of the real Profile sheet, the button's left edge is 23.1
+   *  points in from the sheet's, and `DSNavBar` pads by `DS.Spacing.screenHorizontal`. */
+  inset?: number;
+  /** Above and below the row. 22 above, measured off the same photograph: the button's
+   *  top edge is 22.0 points under the sheet's. */
+  top?: number;
+  bottom?: number;
+  /** Centre the title on the screen, which is what an app does when there is a button in
+   *  the corner. With no button the title sits on the left. */
+  centre?: boolean;
+}
+
+const { kind, title = '', inset, top = 22, bottom = 8, centre } = Astro.props;
+const middle = centre ?? !!kind;
+
+import IOSCircleButton from './IOSCircleButton.astro';
+
+const vars = [
+  `--bar-x: ${inset != null ? inset + 'px' : 'var(--db-screen-x, 24px)'}`,
+  `--bar-top: ${top}px`,
+  `--bar-bottom: ${bottom}px`
+].join('; ');
+---
+
+<header class="appbar" style={vars} data-centre={middle ? 'true' : undefined}>
+  <div class="appbar-row">
+    {/* Laid over the row rather than beside it, so the title is on the middle of the
+        screen however wide the button is, and level with it. */}
+    {title && <h1 class="appbar-title">{title}</h1>}
+    {kind ? <IOSCircleButton kind={kind} /> : <slot name="leading" />}
+    <span class="appbar-gap"></span>
+    <slot name="trailing" />
+  </div>
+</header>
+
+<style>
+  .appbar {
+    position: relative;
+    padding: var(--bar-top) var(--bar-x) var(--bar-bottom);
+  }
+
+  .appbar-row {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--db-space-2, 8px);
+    min-height: 44px;
+  }
+
+  .appbar-gap { flex: 1 1 auto; }
+
+  .appbar-title {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    font-size: var(--db-ios-headline, 17px);
+    font-weight: 700;
+    color: var(--db-text, #000000);
+    /* It has to let the pointer through to the button under it. */
+    pointer-events: none;
+  }
+
+  .appbar[data-centre] .appbar-title { justify-content: center; }
+</style>

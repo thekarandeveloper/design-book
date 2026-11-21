@@ -270,7 +270,9 @@ export function promptFor({ frame, picks, details, issues, note, shot, hasRefere
   if (hasReference) out.push('Reference: the second picture in the screenshot is what it should look like.');
   if (note && note.trim()) out.push('', note.trim());
   if (hint) out.push(hint);
-  return out.join('\n');
+  // A blank line at the end, so pasting this somewhere leaves the cursor on a line of
+  // its own and you can start typing rather than first pressing return.
+  return out.join('\n') + '\n\n';
 }
 
 export const shortList = short;

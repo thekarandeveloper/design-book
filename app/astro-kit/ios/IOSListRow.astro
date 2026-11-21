@@ -1,0 +1,159 @@
+---
+// One row of an iOS list.
+//
+// The thing that makes a grouped iOS list look like one is not the rounded box: it is that
+// the hairline between rows starts where the row's text starts, not at the edge of the box.
+// So the line is inset, and it is inset further when the row has a leading icon.
+
+import Icon from '../base/Icon.astro';
+
+interface Props {
+  title?: string;
+  subtitle?: string;
+  /** The grey text on the right. */
+  value?: string;
+  chevron?: boolean;
+  /** A symbol name for the leading icon. */
+  icon?: string;
+  iconColor?: string;
+  destructive?: boolean;
+  /** For the corners of a grouped list, when the row is not inside IOSGroupedList. */
+  first?: boolean;
+  last?: boolean;
+}
+
+const {
+  title = '',
+  subtitle,
+  value,
+  chevron = true,
+  icon,
+  iconColor,
+  destructive = false,
+  first = false,
+  last = false
+} = Astro.props;
+
+// The chevron is drawn here rather than taken from the icon set: it is on most rows of most
+// screens, and it must not depend on which symbols a project happens to have.
+---
+
+<div
+  class="ios-row"
+  data-icon={String(!!icon)}
+  data-first={String(first)}
+  data-last={String(last)}
+  data-destructive={String(destructive)}
+>
+  {icon && (
+    <span class="lead">
+      <Icon name={icon} size={22} color={iconColor || 'var(--db-text-secondary, #4E6177)'} />
+    </span>
+  )}
+  <span class="text">
+    <span class="title">{title}</span>
+    {subtitle && <span class="subtitle">{subtitle}</span>}
+  </span>
+  <span class="right">
+    {value && <span class="value">{value}</span>}
+    {chevron && (
+      <svg class="chev" viewBox="0 0 8 14" aria-hidden="true"><path d="M1.2 1.2 6.6 7l-5.4 5.8" /></svg>
+    )}
+  </span>
+</div>
+
+<style>
+  .ios-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    width: 100%;
+    /* At least a touch target. A row with a subtitle grows past it. */
+    min-height: var(--db-touch, 44px);
+    padding: var(--db-space-2, 8px) var(--db-space-4, 16px);
+    gap: var(--db-space-3, 12px);
+    background: var(--db-surface, #FFFFFF);
+    color: var(--db-text, #152233);
+    font-family: var(--db-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  }
+
+  /* The hairline between rows, inset to where the text starts. */
+  .ios-row::after {
+    content: '';
+    position: absolute;
+    left: var(--db-space-4, 16px);
+    right: 0;
+    bottom: 0;
+    height: var(--db-hairline, 0.5px);
+    background: var(--db-border, #D8E3EF);
+  }
+  /* 16 of padding, a 22 icon and 12 of gap: the text starts at 50. */
+  .ios-row[data-icon='true']::after { left: var(--db-ios-row-inset-icon, 50px); }
+  /* The last row of a group has nothing under it to be divided from. */
+  .ios-row[data-last='true']::after { display: none; }
+
+  .ios-row[data-first='true'] {
+    border-top-left-radius: var(--db-ios-group-radius, 10px);
+    border-top-right-radius: var(--db-ios-group-radius, 10px);
+  }
+  .ios-row[data-last='true'] {
+    border-bottom-left-radius: var(--db-ios-group-radius, 10px);
+    border-bottom-right-radius: var(--db-ios-group-radius, 10px);
+  }
+
+  .lead {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--db-ios-row-icon, 22px);
+  }
+
+  .text {
+    display: flex;
+    flex-direction: column;
+    gap: var(--db-ios-row-subtitle-gap, 2px);
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .title {
+    font-size: var(--db-ios-body, 17px);
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ios-row[data-destructive='true'] .title { color: var(--db-danger, #DC2626); }
+
+  .subtitle {
+    font-size: var(--db-ios-footnote, 13px);
+    color: var(--db-text-secondary, #4E6177);
+    line-height: 1.25;
+  }
+
+  .right {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--db-space-2, 8px);
+    margin-left: auto;
+  }
+
+  .value {
+    font-size: var(--db-ios-body, 17px);
+    color: var(--db-text-muted, #94A6BA);
+    white-space: nowrap;
+  }
+
+  .chev {
+    height: var(--db-ios-chevron-row, 13px);
+    width: auto;
+    fill: none;
+    stroke: var(--db-text-muted, #94A6BA);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+</style>

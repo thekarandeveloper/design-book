@@ -34,6 +34,17 @@ export const measurePage = (url, width, viewport) => send('/__api/measure', 'POS
 // shows while it is too small to run, or has not finished loading. `again` throws away the
 // old one first. Answers when it is drawn, or says why it cannot be yet.
 export const ensurePoster = (page, again) => send('/__api/poster', 'POST', { page, again: !!again });
+// Read the board again and draw every frame again, the way a change on disk does.
+export const reloadBoard = () => send('/__api/reload', 'POST', {});
+// The board's own commits on the branch you are on, and going back to one.
+export const boardHistory = () => send('/__api/history', 'GET');
+export const boardRevert = sha => send('/__api/history/revert', 'POST', { sha });
+// Told when the board has saved a change of its own.
+export function onHistory(handler) {
+  if (!import.meta.hot) return () => {};
+  import.meta.hot.on('studio:history', handler);
+  return () => import.meta.hot.off('studio:history', handler);
+}
 // Told when a picture has been drawn, or could not be yet. Asking for one answers at once
 // and the picture comes later, over the same socket as every other change on the board.
 export function onPoster(handler) {
@@ -70,6 +81,8 @@ export const deleteToken = (file, scope, name) =>
   send('/__api/tokens', 'PUT', { file, scope, name, value: null });
 export const getTokens = file => json(`/__api/tokens${file ? `?file=${encodeURIComponent(file)}` : ''}`);
 export const putRefs = items => send('/__api/refs', 'PUT', { items });
+// Thrown away, not destroyed: the file goes to .designbook/.trash.
+export const deleteRef = name => send('/__api/ref/delete', 'POST', { name });
 export const getBrief = page => fetch(`/__api/brief${page ? `?page=${encodeURIComponent(page)}` : ''}`).then(r => r.text());
 
 export const upload = (name, buffer) =>
@@ -142,14 +155,3 @@ export const pictureUrl = name => `/__api/shotfile?name=${encodeURIComponent(nam
 
 // Keeping the board's files on the repo's default branch, whatever branch is checked out.
 // The state arrives here once and then over the socket as it changes.
-export const getSync = () => json('/__api/sync');
-export const enableSync = on => send('/__api/sync/enable', 'POST', { on });
-export const syncNow = () => send('/__api/sync/now', 'POST', {});
-export const resolveSync = (path, take) => send('/__api/sync/resolve', 'POST', { path, take });
-// Many files changed at once and are held: send them, or put them back as origin has them.
-export const approveSync = action => send('/__api/sync/approve', 'POST', { action });
-export function onSync(handler) {
-  if (!import.meta.hot) return () => {};
-  import.meta.hot.on('studio:sync', handler);
-  return () => import.meta.hot.off('studio:sync', handler);
-}

@@ -1,0 +1,51 @@
+---
+// The home indicator iOS draws on the bottom edge.
+//
+// It is not just the 5 tall bar: it is the 34 tall area the bar sits in, and that area is
+// why a screen's last row of content never touches the bottom of the phone.
+
+interface Props {
+  scheme?: 'light' | 'dark';
+  /** The colour of the bar: dark on a light screen, light on a dark one. */
+  tint?: 'dark' | 'light';
+}
+
+const { scheme = 'light', tint = 'dark' } = Astro.props;
+---
+
+<div class="home" data-scheme={scheme} data-tint={tint}>
+  <span class="grip"></span>
+</div>
+
+<style>
+  .home {
+    /* The bottom of the screen, under everything the app draws. In the flow it lands wherever
+       the content happens to end, which is the middle of a short screen. */
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    box-sizing: border-box;
+    width: 100%;
+    /* The safe area below the content on a 393 x 852 phone. */
+    height: var(--db-ios-home-height, 34px);
+    /* The bar does not sit on the very edge: it is lifted off it. */
+    padding-bottom: var(--db-ios-home-bottom, 8px);
+    /* Transparent, because it is drawn over whatever the screen puts behind it. */
+    background: transparent;
+  }
+
+  .grip {
+    width: var(--db-ios-home-width, 140px);
+    height: var(--db-ios-home-bar, 5px);
+    border-radius: var(--db-radius-full, 999px);
+  }
+
+  /* The bar is the text colour at part strength, not a colour of its own, so it works on a
+     surface of any shade. */
+  .home[data-tint='dark'] .grip { background: color-mix(in srgb, var(--db-text, #152233) 72%, transparent); }
+  .home[data-tint='light'] .grip { background: color-mix(in srgb, var(--db-on-primary, #FFFFFF) 85%, transparent); }
+</style>

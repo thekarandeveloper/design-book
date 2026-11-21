@@ -1,0 +1,168 @@
+---
+// One row of a Material 3 list: a leading icon or avatar, one to three lines of text, and
+// something small at the right.
+//
+// The one thing got wrong without it is the height. Material fixes a row at 56, 72 or 88 by
+// how many lines of text it holds, so a list of these rows is even and a list of rows sized
+// by their own padding never is. The number of lines is counted here, from what was passed,
+// so nobody has to keep the two in step by hand.
+//
+// A three line row puts its text at the top, not in the middle, because the block of text
+// is taller than the icon beside it.
+
+import Icon from '../base/Icon.astro';
+
+const {
+  title = '',
+  subtitle = '',
+  supporting = '',
+  icon = '',
+  avatar = false,
+  trailing = '',
+  divider = false,
+  lines = 0,
+  scheme = 'light'
+} = Astro.props;
+
+// What was passed decides the height unless the page says otherwise. Three lines of text
+// are a three line row whatever anybody writes.
+const counted = supporting ? 3 : subtitle ? 2 : 1;
+const rows = Number(lines) >= 1 && Number(lines) <= 3 ? Number(lines) : counted;
+
+// An avatar with no picture is Material's own monogram, so it needs a letter and not a
+// blank circle.
+const initial = String(title).trim().charAt(0).toUpperCase();
+---
+
+<div class="item" data-scheme={scheme} data-lines={rows} data-divider={divider ? 'true' : 'false'}>
+  {avatar && <span class="avatar">{initial}</span>}
+  {!avatar && icon && (
+    <span class="lead">
+      <Icon name={icon} size={24} color="currentColor" filled={false} />
+    </span>
+  )}
+
+  <span class="text">
+    <span class="title">{title}</span>
+    {subtitle && <span class="subtitle">{subtitle}</span>}
+    {supporting && <span class="supporting">{supporting}</span>}
+  </span>
+
+  {trailing && <span class="trailing">{trailing}</span>}
+</div>
+
+<style>
+  .item {
+    /* 56, 72 and 88 are Material's three row heights, and 16 is its side padding. */
+    --item-height: var(--db-android-list-1, 56px);
+    --item-pad: var(--db-space-4, 16px);
+
+    min-height: var(--item-height);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: var(--db-space-4, 16px);
+    padding: 0 var(--item-pad);
+    background: var(--db-surface, #FFFFFF);
+    font-family: var(--db-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+    color: var(--db-text, #152233);
+  }
+
+  .item[data-lines='2'] {
+    --item-height: var(--db-android-list-2, 72px);
+  }
+
+  .item[data-lines='3'] {
+    --item-height: var(--db-android-list-3, 88px);
+    align-items: flex-start;
+    padding-top: var(--db-space-3, 12px);
+    padding-bottom: var(--db-space-3, 12px);
+  }
+
+  /* The hairline starts where the text starts in Material, not at the screen edge, which is
+     why it is drawn on the text and not on the row. */
+  .item[data-divider='true'] {
+    position: relative;
+  }
+
+  .item[data-divider='true']::after {
+    content: '';
+    position: absolute;
+    left: var(--item-pad);
+    right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--db-border, #D8E3EF);
+  }
+
+  .lead {
+    width: var(--db-android-icon, 24px);
+    height: var(--db-android-icon, 24px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--db-text-secondary, #4E6177);
+    flex: none;
+  }
+
+  /* 40 is Material's avatar in a list row. */
+  .avatar {
+    width: var(--db-android-avatar, 40px);
+    height: var(--db-android-avatar, 40px);
+    border-radius: var(--db-radius-full, 999px);
+    background: color-mix(in srgb, var(--db-primary, #2E7BF6) 16%, transparent);
+    color: var(--db-primary, #2E7BF6);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: var(--db-android-body, 14px);
+    font-weight: 600;
+    flex: none;
+  }
+
+  .text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* Android's body is 14. It is never iOS's 17, and a row set at 17 is a row that will not
+     fit the height above it. */
+  .title {
+    font-size: var(--db-android-body, 14px);
+    font-weight: 500;
+    line-height: 20px;
+    color: var(--db-text, #152233);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .subtitle {
+    font-size: var(--db-android-body, 14px);
+    line-height: 18px;
+    color: var(--db-text-secondary, #4E6177);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .supporting {
+    font-size: var(--db-android-label-sm, 12px);
+    line-height: 16px;
+    color: var(--db-text-muted, #94A6BA);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .trailing {
+    font-size: var(--db-android-label-sm, 12px);
+    line-height: 16px;
+    color: var(--db-text-secondary, #4E6177);
+    white-space: nowrap;
+    flex: none;
+  }
+</style>

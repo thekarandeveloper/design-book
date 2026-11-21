@@ -1,0 +1,133 @@
+---
+// The bar Android draws above every screen: the clock at the left, the indicators at the right.
+//
+// The one thing got wrong without it is the clock. Android puts the time on the left and iOS
+// puts it in the middle, so a page copied from an iPhone layout reads as the wrong phone
+// before anybody has looked at the screen under it.
+
+const {
+  time = '9:41',
+  tint = 'dark',
+  scheme = 'light',
+  signal = 4,
+  wifi = true,
+  battery = 86,
+  charging = false
+} = Astro.props;
+
+// Android's status bar is 24 tall at every density, so the height is a constant here and
+// not something a page can pass in and get wrong.
+const bars = [0, 1, 2, 3];
+const level = Math.max(0, Math.min(4, Math.round(Number(signal) || 0)));
+
+// The battery is drawn, not written, so the number has to become a length. Clamped, because
+// a design file happily says 120 percent.
+const charge = Math.max(0, Math.min(100, Number(battery) || 0));
+// The inside of the battery is 12 tall, from y 3 to y 15, and it fills from the bottom.
+const fillHeight = (12 * charge) / 100;
+const fillTop = 15 - fillHeight;
+---
+
+<div class="status" data-scheme={scheme} data-tint={tint}>
+  <span class="clock">{time}</span>
+
+  <span class="signs">
+    <svg class="sign signal" viewBox="0 0 16 12" aria-hidden="true">
+      {bars.map(i => (
+        <rect
+          x={i * 4.5}
+          y={12 - (i + 1) * 3}
+          width="3"
+          height={(i + 1) * 3}
+          rx="0.5"
+          opacity={i < level ? '1' : '0.3'}
+        />
+      ))}
+    </svg>
+
+    {wifi && (
+      <svg class="sign wifi" viewBox="0 0 16 12" aria-hidden="true">
+        <path d="M8 11.2 L1 4.2 A10 10 0 0 1 15 4.2 Z" />
+      </svg>
+    )}
+
+    <svg class="sign battery" viewBox="0 0 10 16" aria-hidden="true">
+      <path d="M3.4 0h3.2v2H3.4z" />
+      <rect x="0" y="2" width="10" height="14" rx="1.6" class="shell" />
+      <rect x={1} y={fillTop} width="8" height={fillHeight} rx="0.8" />
+      {charging && <path class="bolt" d="M5.9 4.6 3.1 9.4h1.7l-0.7 3.6 2.9-5h-1.8z" />}
+    </svg>
+  </span>
+</div>
+
+<style>
+  .status {
+    /* Every length is an alias, so a project can move one and the Material value stays the
+       fallback. 24 is Android's own status bar height. */
+    --status-height: var(--db-android-status-h, 24px);
+    --status-type: var(--db-android-body, 14px);
+    --status-pad: var(--db-space-4, 16px);
+    --status-gap: var(--db-space-1, 4px);
+    --status-ink: var(--db-text, #152233);
+
+    height: var(--status-height);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 var(--status-pad);
+    box-sizing: border-box;
+    font-family: var(--db-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+    color: var(--status-ink);
+    flex: none;
+  }
+
+  /* A light tint means light glyphs over a dark photo or a coloured bar. It is the text
+     colour that changes, never the bar's own background, because the screen behind the bar
+     is what is dark. */
+  .status[data-tint='light'] {
+    --status-ink: var(--db-on-primary, #FFFFFF);
+  }
+
+  .clock {
+    font-size: var(--status-type);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .signs {
+    display: flex;
+    align-items: center;
+    gap: var(--status-gap);
+  }
+
+  /* currentColor throughout, so the tint above is the only thing that sets the glyphs. */
+  .sign {
+    display: block;
+    fill: currentColor;
+  }
+
+  .signal { height: 12px; width: 16px; }
+  .wifi { height: 12px; width: 16px; }
+  .battery { height: 14px; width: 8.75px; }
+
+  /* The shell is the outline, so it is drawn as a frame and not as a solid block, or the
+     charge inside it would not be visible. */
+  .battery .shell {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.2;
+    opacity: 0.45;
+  }
+
+  /* The bolt sits over the fill, and it reads only if it cuts a hole in it. So it is drawn
+     in whatever the bar is sitting on, which flips with the tint. */
+  .battery .bolt {
+    fill: var(--db-surface, #FFFFFF);
+  }
+
+  .status[data-tint='light'] .battery .bolt {
+    fill: var(--db-text, #152233);
+  }
+</style>

@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { getRefs, putRefs, upload, getAssets } from './api.js';
+import { getRefs, putRefs, upload, getAssets, deleteRef } from './api.js';
 import { RefDialog } from './RefDialog.jsx';
+import { Pointed, usePointed } from './Pointed.jsx';
+
+const ask = message => window.parent.postMessage(message, '*');
 
 // References, as a grid of thumbnails.
 //
@@ -19,8 +22,40 @@ export function Moodboard() {
   const timers = useRef({});
   const input = useRef(null);
 
+  // The corner button, which is the same button on every view and adds this view's thing.
+  useEffect(() => {
+    const open = () => input.current && input.current.click();
+    window.addEventListener('st-add', open);
+    return () => window.removeEventListener('st-add', open);
+  }, []);
+
   const load = useCallback(() => { getRefs().then(setRefs).catch(() => setRefs([])); }, []);
   useEffect(load, [load]);
+
+  // Only what can be looked at. A PDF or a zip in a moodboard is a file somebody has to
+  // open somewhere else, and a wall of grey tiles is not a moodboard.
+  const media = refs.filter(r => r.kind === 'image' || r.kind === 'video');
+
+  // The name, on the clipboard, because that is what a prompt refers to: "like
+  // shelf-3.png" is a thing an agent can go and look at and find in .designbook/refs/.
+  // A newline comes with it, so pasting it leaves the cursor ready to keep typing.
+  const [said, setSaid] = useState('');
+  const pointed = usePointed();
+  const copyName = async name => {
+    const text = name + '\n';
+    ask({ type: 'copy', text });
+    try { await navigator.clipboard.writeText(text); } catch (_) {}
+    setSaid(name);
+    setTimeout(() => setSaid(s => (s === name ? '' : s)), 1400);
+  };
+
+  // Thrown away, not destroyed: the server moves the file to .designbook/.trash.
+  const throwAway = async name => {
+    pointed.close();
+    setRefs(list => list.filter(r => r.name !== name));
+    try { await deleteRef(name); } catch (_) {}
+    load();
+  };
 
   // What the repo already holds, which is a reference too: its own logos, icons and
   // photographs. They stay where they are and are shown from there, because a copy of a
@@ -81,24 +116,39 @@ export function Moodboard() {
       onDrop={onDrop}
     >
       <div className="st-doc-inner">
+        {/* The page says what it is by what is on it. The paragraph that used to be here
+            explained dropping, where files are saved and what kinds are allowed, and
+            then the empty state said the same thing again underneath it. */}
         <h2>Moodboard</h2>
-        <p className="st-note-line">
-          Drop anything here: screenshots, a video, a PDF, a link, any file. It is saved
-          in this repo under <code>.designbook/refs/</code>.
-          {busy ? ` Adding ${busy}...` : ''}
-        </p>
+        {busy ? <p className="st-note-line">Adding {busy}...</p> : null}
 
         {asking ? (
           <RefDialog files={asking} onDone={save} onCancel={() => setAsking(null)} />
         ) : null}
 
+        {!media.length ? (
+          <p className="st-empty-line">
+            Drop anything here, or press <b>+</b>. Saved in <code>.designbook/refs/</code>.
+          </p>
+        ) : null}
+
         <div className="st-grid">
-          {refs.map(ref => (
-            <div className="st-tile" key={ref.name}>
-              <a className="st-tile-art" href={ref.url} target="_blank" rel="noreferrer" title={ref.name}>
+          {media.map(ref => (
+            <div className="st-tile" key={ref.name} onContextMenu={pointed.open(ref)}>
+              {/* Clicking takes the name, because that is what this tile is for: naming
+                  the reference in a prompt. Opening the file is in the menu, where
+                  something you do rarely belongs. */}
+              <button
+                type="button"
+                className="st-tile-art"
+                title={`Copy ${ref.name}`}
+                onClick={() => copyName(ref.name)}
+              >
                 <Thumb item={ref} />
-              </a>
-              <span className="st-tile-name" title={ref.name}>{ref.name}</span>
+              </button>
+              <span className="st-tile-name" title={ref.name}>
+                {said === ref.name ? 'Copied' : ref.name}
+              </span>
               {ref.tags && ref.tags.length ? (
                 <span className="st-tile-tags">{ref.tags.join(' · ')}</span>
               ) : null}
@@ -111,12 +161,29 @@ export function Moodboard() {
             </div>
           ))}
 
-          <button className="st-tile st-tile--add" onClick={() => input.current?.click()}>
-            <span className="st-tile-art"><em>+ add</em></span>
-            <span className="st-tile-name">Add references</span>
-            <span className="st-tile-sub">or drop them anywhere here</span>
-          </button>
         </div>
+
+        <Pointed at={pointed.at} onClose={pointed.close}>
+          <button
+            className="st-menu-item"
+            onClick={() => { copyName(pointed.at.item.name); pointed.close(); }}
+          >
+            Copy name
+          </button>
+          <button
+            className="st-menu-item"
+            onClick={() => { window.open(pointed.at.item.url, '_blank', 'noreferrer'); pointed.close(); }}
+          >
+            Open
+          </button>
+          <button
+            className="st-menu-item st-menu-item--bad"
+            onClick={() => throwAway(pointed.at.item.name)}
+          >
+            Delete
+          </button>
+          <div className="st-menu-note">Deleted goes to .designbook/.trash</div>
+        </Pointed>
 
         {own ? <Own assets={own} /> : null}
 
@@ -135,20 +202,23 @@ export function Moodboard() {
 // The repo's own pictures, grouped the way somebody looks for them. Read only: the file
 // belongs to the project, and clicking a tile opens it where it really is.
 function Own({ assets }) {
+  // Only what can be looked at, the same rule as the board above. The scan picks these
+  // up by where they sit, so a Swift file in an Assets folder came through as a logo:
+  // a grey tile saying SWIFT is not a reference, it is a file somebody has to open
+  // somewhere else.
+  const seen = /\.(png|jpe?g|webp|avif|gif|svg|mp4|webm|mov)$/i;
+  const media = list => (list || []).filter(i => seen.test(i.file));
   const groups = [
-    ['Logos', assets.logos || []],
-    ['Icons', assets.icons || []],
-    ['Images', assets.images || []],
-    ['Fonts', assets.fonts || []]
+    ['Logos', media(assets.logos)],
+    ['Icons', media(assets.icons)],
+    ['Images', media(assets.images)]
   ].filter(([, list]) => list.length);
   if (!groups.length) return null;
 
   return (
     <>
-      <h2 style={{ marginTop: 34 }}>What this repo already has</h2>
-      <p className="st-note-line">
-        Found where it lies and shown from there, never copied. Click one to open the file.
-      </p>
+      <h2>Already in this repo</h2>
+      <p className="st-note-line">Shown where they lie, never copied.</p>
       {groups.map(([name, list]) => (
         <div key={name}>
           <div className="st-menu-note">{name} ({list.length})</div>
@@ -165,9 +235,9 @@ function Own({ assets }) {
                 )}
               >
                 <span className="st-tile-art">
-                  {/\.(png|jpe?g|webp|avif|gif|svg)$/i.test(item.file)
-                    ? <img src={`/@repo/${item.file}`} alt={item.file} />
-                    : <em>{(item.file.split('.').pop() || 'file').slice(0, 5)}</em>}
+                  {/\.(mp4|webm|mov)$/i.test(item.file)
+                    ? <video src={`/@repo/${item.file}`} muted playsInline preload="metadata" />
+                    : <img src={`/@repo/${item.file}`} alt={item.file} />}
                 </span>
                 <span className="st-tile-name">{item.file.split('/').pop()}</span>
                 <span className="st-tile-sub">{item.file}</span>

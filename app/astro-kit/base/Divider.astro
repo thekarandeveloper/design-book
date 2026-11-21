@@ -1,0 +1,38 @@
+---
+// A hairline between two rows, or between two things in a row.
+//
+// It is one physical line, not a border on a row. A list whose rows carry their own borders
+// doubles the line wherever two rows meet, and the inset is how a platform list draws it:
+// the line starts where the text starts, not at the edge of the screen.
+
+interface Props {
+  inset?: number;
+  vertical?: boolean;
+}
+
+const { inset = 0, vertical = false } = Astro.props;
+
+const style = vertical
+  ? `margin:${inset}px 0`
+  : `margin-left:${inset}px`;
+---
+
+<div class:list={['line', vertical ? 'vertical' : 'horizontal']} style={style} role="separator"></div>
+
+<style>
+  .line {
+    /* A flex parent would otherwise stretch or squeeze the line itself. */
+    flex: 0 0 auto;
+    background: var(--db-border, #D8E3EF);
+  }
+
+  .horizontal {
+    width: auto;
+    height: 1px;
+  }
+
+  .vertical {
+    width: 1px;
+    align-self: stretch;
+  }
+</style>

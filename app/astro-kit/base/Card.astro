@@ -1,0 +1,51 @@
+---
+// A surface: the white block a screen puts its content on.
+//
+// The hairline is on by default because a card on a tinted background reads as a card only
+// when its edge is drawn. Turn it off for a card that sits on white, where a border would
+// be a line nobody intended.
+
+interface Props {
+  padding?: number | string;
+  radius?: number | string;
+  background?: string;
+  border?: boolean;
+  shadow?: boolean;
+  gap?: number | string;
+  width?: number | string;
+}
+
+const {
+  padding = 'var(--db-space-4, 16px)',
+  radius = 'var(--db-radius-xl, 16px)',
+  background = 'var(--db-surface, #FFFFFF)',
+  border = true,
+  shadow = false,
+  gap,
+  width
+} = Astro.props;
+
+const len = (v) => (typeof v === 'number' ? `${v}px` : v);
+
+const style = [
+  `padding:${len(padding)}`,
+  `border-radius:${len(radius)}`,
+  `background:${background}`,
+  border ? 'border:1px solid var(--db-border, #D8E3EF)' : 'border:0',
+  shadow ? 'box-shadow:var(--db-shadow, 0 1px 3px rgba(21, 34, 51, 0.10))' : null,
+  // A gap only means anything once the card lays its children out, so asking for one is
+  // what turns the card into a column.
+  gap ? `display:flex;flex-direction:column;gap:${len(gap)}` : null,
+  width ? `width:${len(width)}` : null
+].filter(Boolean).join(';');
+---
+
+<div class="card" style={style}><slot /></div>
+
+<style>
+  .card {
+    /* A card is a box of content, and its own corners must cut whatever runs to its edge,
+       an image at the top for instance. */
+    overflow: hidden;
+  }
+</style>

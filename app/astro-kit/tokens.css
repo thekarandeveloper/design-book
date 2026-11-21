@@ -1,0 +1,86 @@
+/* The values every component in the kit reads.
+ *
+ * These are the fallbacks, and they are deliberately plain: a page built on a project that has
+ * no design system of its own still looks like something, in a neutral blue and grey.
+ *
+ * A project's own values are not written over this file. The board reads the project's design
+ * system out of its code and puts those values into every page it serves, after this, so they
+ * win. That is why this file is the same for every board and never has to be generated.
+ *
+ * Every component writes `var(--db-x, fallback)` as well, so a value missing here is still a
+ * value. This file exists so a page can be opened on its own, outside the board, and look
+ * right.
+ */
+
+:root {
+  /* Colour */
+  --db-primary: #2E7BF6;
+  --db-on-primary: #FFFFFF;
+  --db-surface: #FFFFFF;
+  --db-surface-raised: #F7FAFD;
+  --db-background: #F2F2F7;
+  --db-border: #D8E3EF;
+  --db-text: #152233;
+  --db-text-secondary: #4E6177;
+  --db-text-muted: #94A6BA;
+  --db-danger: #DC2626;
+  --db-success: #059669;
+  --db-warning: #D97706;
+
+  /* Corners */
+  --db-radius-sm: 4px;
+  --db-radius-md: 8px;
+  --db-radius-lg: 12px;
+  --db-radius-xl: 16px;
+  --db-radius-2xl: 20px;
+  --db-radius-full: 999px;
+  /* A bottom sheet is its own radius because it is much rounder than a card, and a sheet
+     drawn at a card's radius is the single thing that most makes a copy look wrong. */
+  --db-radius-bottom-sheet: 40px;
+
+  /* Space. The scale is 1,2,3,4,5,6,7,8,10,12,16, which is 4 through 64 in the steps real
+     design systems use, including the 28 that iOS needs and a pure 4,8,16 scale has not. */
+  --db-space-1: 4px;
+  --db-space-2: 8px;
+  --db-space-3: 12px;
+  --db-space-4: 16px;
+  --db-space-5: 20px;
+  --db-space-6: 24px;
+  --db-space-7: 28px;
+  --db-space-8: 32px;
+  --db-space-10: 40px;
+  --db-space-12: 48px;
+  --db-space-16: 64px;
+  /* How far a screen's content sits from its edge. Not a step on the scale: it is a decision,
+     and it is the number a copy of a screen gets wrong most often. */
+  --db-screen-x: 24px;
+
+  /* Type. The face only: the sizes belong to each platform and are never shared, because iOS
+     body is 17 and Android body is 14, and forcing one number on both makes one of them wrong
+     on every screen in a way its own users feel without being able to name. */
+  --db-font: -apple-system, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif;
+  --db-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* What a raised surface casts. A project that forbids shadows sets this to none and every
+     component follows, with nothing to change in any of them. */
+  --db-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* Dark is not light inverted: the surfaces lose saturation so they do not vibrate, and the
+   accents gain some so they stay visible. A component never checks the scheme; it reads the
+   same variable and gets the other value. */
+:root[data-scheme="dark"] {
+  --db-primary: #4A82D6;
+  --db-on-primary: #FFFFFF;
+  --db-surface: #0B1320;
+  --db-surface-raised: #131D2E;
+  --db-background: #060B16;
+  --db-border: #2C3B4F;
+  --db-text: #FFFFFF;
+  --db-text-secondary: #B4C3D4;
+  --db-text-muted: #5E718A;
+  --db-danger: #E57878;
+  --db-success: #2DC78C;
+  --db-warning: #EBA852;
+  --db-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.35);
+}

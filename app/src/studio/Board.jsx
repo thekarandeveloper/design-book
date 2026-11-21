@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FRAME_GROUPS } from './frames.js';
 import { holdWheel, onEachFrame, wheelStep } from './navigate.js';
 import { SleeperContext, createSleeper } from './awake.js';
-import { usePick, PickLayer, PickPanel, PickDialogs, warmAhead } from './Pick.jsx';
+import { usePick, PickLayer, PickBody, PickDialogs, warmAhead } from './Pick.jsx';
 import { labelOf } from './pick.js';
+import { History } from './History.jsx';
 
 // The board: sections, zoom, pan, selection, frames you can move between sections and
 // resize.
@@ -34,12 +35,25 @@ const EDGE = 50000;
 // the one number the stylesheet and the placement both depend on is written once.
 const BAND_BAR = 24;
 
+// Where the floating bar across the top ends, so nothing is placed behind it.
+const BAR_BOTTOM = 60;
+
 export function Board({
-  frames, bands = [], onResize, onFit, onReload, onDrop,
+  frames, bands = [], onResize, onFit, onBezel, onReload, onDrop,
   onAddSection, onRenameSection, onRemoveSection,
-  onSelect, onRename, onDelete, onCheck, onCopy, onSay, focus,
+  onSelect, onSection, onRename, onDelete, onCheck, onCopy, onSay, onPosters, onDevice, focus,
   storageKey, empty
 }) {
+  // The grid behind the frames. A way of looking at the board rather than part of it, so
+  // it is kept per person and per board in the browser: turning your own grid off is not
+  // a change to the work and must not turn up in anybody's diff.
+  const [grid, setGrid] = useState(() => {
+    try { return localStorage.getItem('st-grid:' + storageKey) === 'on'; } catch (_) { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('st-grid:' + storageKey, grid ? 'on' : 'off'); } catch (_) {}
+  }, [grid, storageKey]);
+
   const boardRef = useRef(null);
   const worldRef = useRef(null);
   const pickWorldRef = useRef(null);
@@ -120,6 +134,13 @@ export function Board({
   // a frame still gives you its panel, its menu and its handles.
   const [inside, setInside] = useState('');
   const [renaming, setRenaming] = useState('');   // a section's name, being typed
+  // The section that is chosen, which is where a new frame goes.
+  //
+  // Choosing a frame chooses the section it is in, because that is the one you are
+  // working in; a section's own name can be pressed to choose it without choosing any
+  // frame, which is how you say where the next frame goes before there is one to put it
+  // beside. Nothing chosen means the last section, where new work went before this.
+  const [chosenBand, setChosenBand] = useState('');
   const [naming, setNaming] = useState('');       // a frame's name, being typed
   const [size, setSize] = useState({ w: 1200, h: 800 });
   const [settling, setSettling] = useState(false);
@@ -165,7 +186,8 @@ export function Board({
     scrolled: !!frame && scrolled.has(frame.id),
     say: onSay || (() => {}),
     onReload,
-    onFit
+    onFit,
+    onBezel
   });
   const pickRef = useRef(pick);
   pickRef.current = pick;
@@ -188,6 +210,14 @@ export function Board({
     setSelected(id);
     if (onSelect) onSelect(id);
   }, [onSelect]);
+
+  // Whichever was chosen last: a frame carries its own section with it.
+  useEffect(() => {
+    const f = frames.find(x => x.id === selected);
+    if (f && f.section && f.section !== chosenBand) setChosenBand(f.section);
+  }, [selected, frames]);
+
+  useEffect(() => { if (onSection) onSection(chosenBand); }, [chosenBand, onSection]);
 
   // Where the board was left, written once the moving stops. Writing to storage is a
   // synchronous thing, and doing it on every drawn frame of a pan is sixty of them a
@@ -276,6 +306,21 @@ export function Board({
       maxY: Math.max(acc.maxY, f.y + (f.height || 600) + 22)
     }), { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
 
+    // The sections too, not only the frames in them.
+    //
+    // A band starts well to the left of its first frame, because that is where its name
+    // sits. Fitting the frames alone put the left edge of the window through the middle
+    // of every section's name, so "fit everything" showed everything except what each
+    // part of it was called.
+    if (!only) {
+      for (const b of bands) {
+        box.minX = Math.min(box.minX, b.x);
+        box.minY = Math.min(box.minY, b.y);
+        box.maxX = Math.max(box.maxX, b.x + b.width);
+        box.maxY = Math.max(box.maxY, b.y + b.height);
+      }
+    }
+
     const rect = boardRef.current.getBoundingClientRect();
     const pad = 56;
     // Everything on the board, however far out that is. A board with one very tall
@@ -290,7 +335,7 @@ export function Board({
       x: pad - box.minX * k + (rect.width - pad * 2 - (box.maxX - box.minX) * k) / 2,
       y: pad - box.minY * k
     });
-  }, [frames, move]);
+  }, [frames, bands, move]);
 
   // Bring one frame into the middle of the window, at a zoom it fits in. A frame that
   // has just been made is no use at the far right of a line nobody has scrolled to.
@@ -373,7 +418,15 @@ export function Board({
       try {
         const view = iframe.contentWindow;
         void view.document;           // throws when the page is another origin
-        view.scrollBy({ left: ev.deltaX * unit, top: ev.deltaY * unit, behavior: 'instant' });
+        // The thing that scrolls is the screen inside the device, not the window.
+        //
+        // A page behind glass is a box of exactly the screen's size with `overflow-y:
+        // auto`, and the document around it is exactly the frame: the window has two or
+        // three pixels of slack and nothing more. Scrolling the window moved a page by
+        // two pixels for a whole turn of the wheel, which reads as not scrolling at all.
+        const screen = view.document.querySelector('[data-scrolls]');
+        const target = screen || view;
+        target.scrollBy({ left: ev.deltaX * unit, top: ev.deltaY * unit, behavior: 'instant' });
         return true;
       } catch (_) {}
       real.classList.add('is-scrolling');
@@ -634,7 +687,7 @@ export function Board({
     <SleeperContext.Provider value={sleeper.current}>
     <div
       ref={boardRef}
-      className={'st-board' + (panning ? ' is-panning' : '') + (drag ? ' is-dragging' : '')}
+      className={'st-board' + (panning ? ' is-panning' : '') + (drag ? ' is-dragging' : '') + (grid ? ' is-ruled' : '')}
       onPointerDown={startPan}
     >
       {/* --k is the zoom, as a number the stylesheet can divide by: a title and the
@@ -679,14 +732,19 @@ export function Board({
           return (
           <div
             key={band.id}
-            className={'st-band-bar' + (drag?.target?.section === band.id ? ' is-target' : '')}
+            className={'st-band-bar'
+              + (drag?.target?.section === band.id ? ' is-target' : '')
+              + (band.id === chosenBand ? ' is-chosen' : '')}
+            onPointerDown={ev => { ev.stopPropagation(); setChosenBand(band.id); }}
             style={{
               // Three things it has to be under, and the lowest of them wins: six
               // pixels above its own line, so it is never on the section before it; its
               // own section's bottom, so it is never under frames it does not name; and
               // the board's own controls in the bottom left corner, which it now shares
               // an edge with.
-              top: Math.max(8, Math.min(top - BAND_BAR - 6, bottom - BAND_BAR - 6, size.h - 72))
+              // Never under the bar that floats across the top. At 8 the name sat behind
+              // it and a section you had scrolled to had no name you could read.
+              top: Math.max(BAR_BOTTOM, Math.min(top - BAND_BAR - 6, bottom - BAND_BAR - 6, size.h - 72))
             }}
           >
             {renaming === band.id ? (
@@ -790,7 +848,7 @@ export function Board({
                   is here: a row of buttons over every frame is a row you read past,
                   and the board is for looking at the work. */}
               {f.check && f.check.issues && f.check.issues.length ? (
-                <span className="st-found" title="What the last check found">
+                <span className="st-findings" title="What the last check found">
                   {f.check.issues.length}
                 </span>
               ) : null}
@@ -821,20 +879,7 @@ export function Board({
 
       {!frames.length && !bands.length ? <div className="st-empty">{empty}</div> : null}
 
-      {frame ? (
-        <Inspector
-          frame={frame}
-          onResize={(w, h) => onResize(frame.id, w, h, true, false)}
-          onFit={onFit ? () => onFit(frame) : null}
-          onReload={onReload ? () => onReload(frame.id) : null}
-          onCheck={onCheck ? () => onCheck(frame.id) : null}
-          onCopy={onCopy}
-          onDelete={frame.canDelete && onDelete ? () => onDelete(frame.id) : null}
-          onClose={() => select('')}
-        />
-      ) : null}
 
-      <PickPanel pick={pick} />
       <PickDialogs pick={pick} />
 
       {menu ? (
@@ -845,38 +890,60 @@ export function Board({
           onReload={onReload}
           onCheck={onCheck}
           onFit={onFit}
+          onBezel={onBezel}
           onRename={id => { setMenu(null); setNaming(id); }}
           onDelete={onDelete}
         />
       ) : null}
 
-      <div className="st-boardbar" onPointerDown={e => e.stopPropagation()}>
-        <div className="st-zoom">
-          <button className="st-btn" title="Zoom out" onClick={() => centre(1 / 1.2)}>&minus;</button>
-          <span>{Math.round(view.k * 100)}%</span>
-          <button className="st-btn" title="Zoom in" onClick={() => centre(1.2)}>+</button>
-        </div>
-        <button className="st-btn" title="Fit everything (1)" onClick={() => fit()}>Fit</button>
-        <button className="st-btn" title="100% (0)" onClick={() => move(v => ({ ...v, k: 1 }))}>100%</button>
-        {pick.live ? (
-          <button
-            className={'st-btn' + (pick.snip ? ' st-btn--go' : '')}
-            title="Snip a region of this frame, to paste (S)"
-            onClick={() => pick.setSnip(on => !on)}
-          >
-            Snip
-          </button>
-        ) : null}
-        {onAddSection ? (
-          <button
-            className="st-btn"
-            title="Split the board: a line across it, and everything under the line is the new section"
-            onClick={() => { const id = onAddSection(); if (id) setRenaming(id); }}
-          >
-            + Section
-          </button>
-        ) : null}
-      </div>
+      {/* Everything on the board, on the screen at once.
+          The one thing about the view that is worth a button of its own: zoom and pan
+          are the wheel and the drag, and this is the way back from them when you have
+          gone somewhere and lost the rest of the work. */}
+      <button
+        className="st-fit"
+        title="Fit everything (1)"
+        aria-label="Fit everything"
+        onPointerDown={e => e.stopPropagation()}
+        onClick={() => fit()}
+      >
+        <FitIcon />
+      </button>
+
+      {/* The board's own menu, bottom right, there whether or not anything is chosen.
+          Everything in here is about the whole board rather than one frame: the grid
+          behind it, whether the devices are drawn, and what it has saved. */}
+      <BoardMenu
+        grid={grid}
+        onGrid={() => setGrid(on => !on)}
+        framed={frames.filter(f => f.band)}
+        onBezel={onBezel}
+        onPosters={onPosters}
+        onDevice={onDevice}
+        chosen={frame}
+        bands={bands}
+        frames={frames}
+      />
+
+      {/* What you can do to the frame you have chosen, along the bottom.
+          Doing used to be mixed into the panel on the right, in a wrapping row that
+          changed shape with the frame, so the same button was never twice in the same
+          place. Here it is one row, in the middle, and it is only there when something
+          is chosen. */}
+      {frame ? (
+        <SelectionBar
+          frame={frame}
+          pick={pick}
+          storageKey={storageKey}
+          onResize={(w, h) => onResize(frame.id, w, h, true, false)}
+          onCopy={onCopy}
+          onReload={onReload ? () => onReload(frame.id) : null}
+          onCheck={onCheck ? () => onCheck(frame.id) : null}
+          onFit={onFit && !frame.band ? () => onFit(frame) : null}
+          onBezel={onBezel && frame.band ? () => onBezel(frame.id, frame.bezel === false) : null}
+          onDelete={frame.canDelete && onDelete ? () => onDelete(frame.id) : null}
+        />
+      ) : null}
     </div>
     </SleeperContext.Provider>
   );
@@ -902,7 +969,7 @@ function MoreIcon() {
   );
 }
 
-function Menu({ pick, at, onClose, onReload, onCheck, onFit, onRename, onDelete }) {
+function Menu({ pick, at, onClose, onReload, onCheck, onFit, onBezel, onRename, onDelete }) {
   const { frame, x, y } = at;
   const ref = useRef(null);
   const [place, setPlace] = useState({ left: x, top: y });
@@ -928,7 +995,14 @@ function Menu({ pick, at, onClose, onReload, onCheck, onFit, onRename, onDelete 
   const frameItems = [
     ...(frame.actions || []).map(action => ({ label: action.label, title: action.title, run: action.onClick })),
     onReload ? { label: 'Reload', title: 'Load this page again', run: () => onReload(frame.id) } : null,
-    onFit ? { label: 'Show full content', title: 'As tall as the whole page, however long it runs', run: () => onFit(frame) } : null,
+    onFit && !frame.band ? { label: 'Show full content', title: 'As tall as the whole page, however long it runs', run: () => onFit(frame) } : null,
+    onBezel && frame.band ? {
+      label: frame.bezel === false ? 'Show the device' : 'Hide the device',
+      title: frame.bezel === false
+        ? 'Draw the phone round this frame: its band, its corners, its island and the bar at the bottom'
+        : 'Just the screen, with nothing round it',
+      run: () => onBezel(frame.id, frame.bezel === false)
+    } : null,
     onCheck ? { label: 'Check this frame', title: 'The words, the claims, what cannot be read', run: () => onCheck(frame.id) } : null,
     frame.canRename && onRename ? { label: 'Rename', title: 'Rename this frame and its file', run: () => onRename(frame.id) } : null,
     frame.canDelete && onDelete ? { label: 'Delete frame', title: 'Its file goes to .designbook/.trash', run: () => onDelete(frame.id), gone: true } : null
@@ -940,7 +1014,7 @@ function Menu({ pick, at, onClose, onReload, onCheck, onFit, onRename, onDelete 
     ? [
         ...pick.menuItems(at.element),
         { group: 'Frame' },
-        ...frameItems.filter(i => i.label === 'Reload' || i.label === 'Show full content')
+        ...frameItems.filter(i => i.label === 'Reload' || i.label === 'Show full content' || i.label.endsWith('the device'))
       ]
     : frameItems;
 
@@ -971,24 +1045,175 @@ function Menu({ pick, at, onClose, onReload, onCheck, onFit, onRename, onDelete 
   );
 }
 
-function Inspector({ frame, onResize, onFit, onReload, onCheck, onCopy, onDelete, onClose }) {
+// Everything about the board, under one button in the corner it is not working in.
+
+// What a frame can be shown on. `own` is the device its page was written for.
+const DEVICES = [
+  { id: 'own', label: 'As written' },
+  { id: 'iphone', label: 'iPhone' },
+  { id: 'android', label: 'Android' },
+  { id: 'ipad', label: 'iPad' },
+  { id: 'web', label: 'MacBook' },
+  { id: 'none', label: 'No device' }
+];
+
+function BoardMenu({ grid, onGrid, framed, onBezel, onPosters, onDevice, chosen, bands, frames }) {
+  const [showing, setShowing] = useState('');   // 'history', 'device', or nothing
+  const some = framed.length;
+  const on = some > 0 && framed.some(f => f.bezel !== false);
+
+  const bezels = () => {
+    framed.forEach(f => onBezel(f.id, !on));
+    if (onPosters) onPosters(framed.map(f => f.id));
+  };
+
+  // Changing the device is about a frame, so it is offered when there is a frame: pick
+  // one, then say what to show it on. With nothing picked this menu is about the whole
+  // board, and the whole board has no one device to be on, so only the switches are here.
+  const canSwap = !!(onDevice && chosen);
+  useEffect(() => { if (!canSwap && showing === 'device') setShowing(''); }, [canSwap, showing]);
+
+  // The frames it is applied to: the chosen frame's own section, which is the unit
+  // somebody thinks in. One frame on a different device from the rest of its row is a
+  // row that no longer compares.
+  const section = chosen ? bands.find(b => b.id === chosen.section) : null;
+  const inSection = section ? frames.filter(f => f.section === section.id) : (chosen ? [chosen] : []);
+  const nowOn = (() => {
+    const kinds = new Set(inSection.map(f => f.device || 'own'));
+    return kinds.size === 1 ? [...kinds][0] : '';
+  })();
+
+  const swap = id => {
+    onDevice(inSection.map(f => f.id), id === 'own' ? '' : id);
+    if (onPosters) onPosters(inSection.map(f => f.id));
+    setShowing('');
+  };
+
+  return (
+    <div className="st-boardmenu">
+      <Pop wide label={<HamburgerIcon />} title="The board: the grid, the devices, what it has saved">
+        {showing ? (
+          <div className="st-pop-page">
+            <nav className="st-crumbs">
+              <button onClick={() => setShowing('')}>
+                <span aria-hidden="true">&lsaquo;</span>
+                This board
+              </button>
+              <i>/</i>
+              <b>{showing === 'history' ? 'History' : 'Device'}</b>
+            </nav>
+            {showing === 'history' ? <History inline /> : (
+              <div className="st-pop-acts" style={{ paddingTop: 8 }}>
+                <p className="st-pop-line">
+                  Applies to every frame in {section ? <b>{section.name}</b> : <b>{chosen.title}</b>}.
+                </p>
+                {DEVICES.map(d => (
+                  <button key={d.id} onClick={() => swap(d.id)} aria-pressed={nowOn === d.id}>
+                    {d.label}
+                    {nowOn === d.id ? <i className="st-tick is-on" /> : null}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <h4>This board</h4>
+            <div className="st-pop-acts">
+              <button onClick={onGrid} aria-pressed={grid}>
+                Grid
+                <Switch on={grid} />
+              </button>
+              {some && onBezel ? (
+                <button onClick={bezels} aria-pressed={on} title={on ? 'Just the screens' : 'Draw the phone round every frame that has one'}>
+                  Bezel
+                  <Switch on={on} />
+                </button>
+              ) : null}
+              {canSwap ? (
+                <button onClick={() => setShowing('device')} title={`What to show ${chosen.title} on`}>
+                  Device
+                  <i className="st-pop-go">&rsaquo;</i>
+                </button>
+              ) : null}
+              <button onClick={() => setShowing('history')}>
+                History
+                <i className="st-pop-go">&rsaquo;</i>
+              </button>
+            </div>
+          </>
+        )}
+      </Pop>
+    </div>
+  );
+}
+
+// A switch, because a tick on its own does not say that the other state exists: with one
+// row ticked and one not, the unticked one reads as missing rather than as off.
+const Switch = ({ on }) => <i className={"st-toggle" + (on ? " is-on" : "")} aria-hidden="true" />;
+
+const FitIcon = () => (
+  <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+    <path d="M6 2.5H3.5a1 1 0 0 0-1 1V6M10 2.5h2.5a1 1 0 0 1 1 1V6M6 13.5H3.5a1 1 0 0 1-1-1V10M10 13.5h2.5a1 1 0 0 0 1-1V10"
+      fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+const CopyIcon = () => (
+  <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+    <rect x="5.4" y="5.4" width="8.2" height="8.2" rx="2" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M10.6 5.4V4.4a2 2 0 0 0-2-2H4.4a2 2 0 0 0-2 2v4.2a2 2 0 0 0 2 2h1" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
+const HamburgerIcon = () => (
+  <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+    <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+
+// A small thing that opens over the bar, and shuts when you press away from it.
+function Pop({ label, chip, wide, title, children }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = ev => { if (box.current && !box.current.contains(ev.target)) setOpen(false); };
+    const esc = ev => { if (ev.key === 'Escape') { ev.stopPropagation(); setOpen(false); } };
+    window.addEventListener('pointerdown', away, true);
+    window.addEventListener('keydown', esc, true);
+    return () => {
+      window.removeEventListener('pointerdown', away, true);
+      window.removeEventListener('keydown', esc, true);
+    };
+  }, [open]);
+  return (
+    <span className="st-pop" ref={box}>
+      <button className={'st-btn' + (open ? ' st-btn--on' : '')} title={title} onClick={() => setOpen(v => !v)}>
+        {label}
+        {chip ? <i className="st-pop-chip">{chip}</i> : null}
+      </button>
+      {open ? <div className={'st-pop-body' + (wide ? ' is-wide' : '')}>{children}</div> : null}
+    </span>
+  );
+}
+
+// How big the frame is, and how to change it.
+function SizeMenu({ frame, onResize, onFit }) {
   const sizes = FRAME_GROUPS.flatMap(([group, grow, list]) =>
     list.map(([label, w, h]) => ({ group, label, w, h })));
-  const match = sizes.find(s => s.w === frame.width && s.h === frame.height);
-  const [custom, setCustom] = useState(!match);
+  const [custom, setCustom] = useState(!sizes.some(x => x.w === frame.width && x.h === frame.height) && !frame.band);
   const [w, setW] = useState(frame.width);
   const [h, setH] = useState(frame.height);
 
   useEffect(() => {
     setW(frame.width);
     setH(frame.height);
-    setCustom(!sizes.some(s => s.w === frame.width && s.h === frame.height));
+    setCustom(!sizes.some(x => x.w === frame.width && x.h === frame.height));
   }, [frame.id, frame.width, frame.height]);
 
-  const pick = value => {
+  const choose = value => {
     if (value === 'custom') return setCustom(true);
-    // As tall as what is in it, and it stays that way: the frame measures itself again
-    // whenever the page changes, so a screen that grows by a section grows with it.
     if (value === 'fit') { setCustom(false); return onFit && onFit(); }
     const [pw, ph] = value.split('x').map(Number);
     setCustom(false);
@@ -1004,16 +1229,11 @@ function Inspector({ frame, onResize, onFit, onReload, onCheck, onCopy, onDelete
   };
 
   return (
-    <div className="st-inspector" onPointerDown={e => e.stopPropagation()}>
-      <header>
-        <b>{frame.title}</b>
-        <button className="st-x" title="Deselect (Escape)" onClick={onClose}>&times;</button>
-      </header>
-
+    <>
       <select
         className="st-select"
         value={frame.fit || frame.measuring ? 'fit' : custom ? 'custom' : `${frame.width}x${frame.height}`}
-        onChange={e => pick(e.target.value)}
+        onChange={e => choose(e.target.value)}
       >
         {onFit ? (
           <option value="fit">
@@ -1028,66 +1248,215 @@ function Inspector({ frame, onResize, onFit, onReload, onCheck, onCopy, onDelete
             ))}
           </optgroup>
         ))}
-        <option value="custom">Custom{custom ? ` · ${frame.width} x ${frame.height}` : ''}</option>
+        <option value="custom">Custom{custom ? ` \u00b7 ${frame.width} x ${frame.height}` : ''}</option>
       </select>
-
       {custom ? (
         <div className="st-row">
           <label>W<input type="number" value={w} onChange={e => setW(e.target.value)} onBlur={commit} /></label>
           <label>H<input type="number" value={h} onChange={e => setH(e.target.value)} onBlur={commit} /></label>
         </div>
       ) : null}
+    </>
+  );
+}
 
-      <div className="st-row st-row--wrap">
-        {(frame.actions || []).map(action => (
-          <button key={action.label} className="st-btn st-btn--small" title={action.title} onClick={action.onClick}>
-            {action.label}
-          </button>
-        ))}
-        {onReload ? (
-          <button className="st-btn st-btn--small" title="Load this page again" onClick={onReload}>
-            Reload
-          </button>
-        ) : null}
-      </div>
+// Everything about the frame that is chosen, on one bar along the bottom.
+//
+// There was a panel on the right as well, and the two said different halves of the same
+// thing: the panel what the frame is, the bar what you can do to it. Two places to look
+// for one frame is one too many, and the panel sat over the work in the corner where the
+// work is. So it is all here, and what does not fit on a row opens over it.
+function SelectionBar({ frame, pick, storageKey, onResize, onReload, onCheck, onCopy, onFit, onBezel, onDelete }) {
+  const acts = [
+    // `Copy name` is the icon beside the title now, and it copies more than the name.
+    ...(frame.actions || []).filter(a => a.label !== 'Copy name')
+      .map(a => ({ label: a.label, title: a.title, run: a.onClick })),
+    onReload ? { label: 'Reload', title: 'Load this page again', run: onReload } : null,
+    onBezel ? {
+      label: frame.bezel === false ? 'Show device' : 'Hide device',
+      title: frame.bezel === false
+        ? 'Draw the phone round this frame: its band, its corners, its island and the bar at the bottom'
+        : 'Just the screen, with nothing round it',
+      run: onBezel
+    } : null,
+    onCheck ? { label: 'Check', title: 'The words, the claims, what cannot be read', run: onCheck } : null,
+    pick && pick.live && pick.actions ? {
+      // A picture of what is chosen, to draw on and then copy.
+      //
+      // Snip was "cut a region out as a picture", which is half of this and the dull
+      // half: what people did with the picture was mark the thing that was wrong on it
+      // and send it to somebody. So the picture is taken and opened to be drawn on, and
+      // what you copy is the drawing.
+      label: 'Annotate',
+      title: 'A picture of what is chosen, to draw on and copy',
+      run: () => pick.actions.annotate()
+    } : null,
+    pick && pick.live ? {
+      label: 'Snip a region',
+      title: 'Drag a box on this frame, to annotate or copy just that (S)',
+      run: () => pick.setSnip(on => !on),
+      on: pick.snip
+    } : null
+  ].filter(Boolean);
 
-      {onCheck ? (
-        <button className="st-btn" onClick={onCheck} title="Look it over: the words, the claims, what cannot be read">
-          Check this frame
-        </button>
+  // The element chosen inside the frame, if it is one rather than several.
+  const picks = (pick && pick.picks) || [];
+  const lead = picks.length === 1 ? picks[0] : null;
+  const detail = lead && pick.details ? pick.details[lead.i] : null;
+  const source = detail && detail.source;
+  const elName = picks.length > 1
+    ? `${picks.length} chosen`
+    : lead
+      ? (lead.kind === 'region' ? 'Region' : labelOf(lead.el))
+      : '';
+  // The most exact thing there is, in the order of how much it says.
+  // The short path, because the long one is this machine's home folder and nobody needs
+  // to read that to find the file.
+  const where = frame.file || frame.path || frame.title;
+
+  // What goes on the clipboard.
+  //
+  // With an element chosen it is the board's own prompt, the same text the element menu's
+  // "Copy prompt" writes: the frame and its file, the element, the selector it was matched
+  // by, its real classes, the file and line it came from and which component owns it, its
+  // size and position, the type, colour, background, border and radius with the token
+  // names where there are tokens, the padding, margin, gap and display, and anything the
+  // check found wrong with that element. That is what an agent needs to go and change it,
+  // and writing a second, thinner version of it here would only be a worse one that drifts.
+  //
+  // With nothing chosen there is nothing to describe, so it is the file.
+  // The same thing in a few words, for the bar and the button's tooltip: the whole of it
+  // is several lines, and a tooltip is not where you read those.
+  const copyWhat = !lead
+    ? where
+    : source && source.file
+      ? `${elName} \u00b7 ${source.file}${source.line ? ':' + source.line : ''}`
+      : detail && detail.selector
+        ? `${elName} \u00b7 ${detail.selector}`
+        : elName;
+
+  // The same set the list shows, so the button cannot say eight while the list has five.
+  const ignored = useIgnored(storageKey);
+  const live = ((frame.check && frame.check.issues) || []).filter(i => !ignored.kinds.has(i.kind));
+  const issues = live.length;
+  const worst = live.filter(i => i.severity === 'bad').length;
+
+  return (
+    <div className="st-selbar" onPointerDown={e => e.stopPropagation()}>
+      {/* What is chosen, and one button to copy it.
+          The frame on its own is the frame; with an element chosen it is that element
+          inside it, and the thing you want on the clipboard is the second one: a file and
+          a line and what it is, which is enough for somebody (or Claude) to go and change
+          it. One icon rather than a word, because the name beside it already says what
+          would be copied. */}
+      <span className="st-selbar-what">
+        <b title={frame.file || frame.title}>{frame.title}</b>
+        {elName ? <><i className="st-selbar-sep">/</i><span title={copyWhat}>{elName}</span></> : null}
+      </span>
+      <button
+        className="st-selbar-copy"
+        title={lead
+          ? `Copy ${copyWhat} \u2014 its selector, classes, the line it came from and how it looks`
+          : `Copy ${where}`}
+        onClick={() => {
+          if (lead && pick.actions) pick.actions.copyPrompt();
+          else if (onCopy) onCopy(frame.id, where + '\n');
+        }}
+      >
+        <CopyIcon />
+      </button>
+
+      <span className="st-selbar-rule" />
+
+      {frame.check ? (
+        <Pop label={`${issues} ${issues === 1 ? 'issue' : 'issues'}`} chip={worst ? `${worst} bad` : null} wide>
+          <Found frame={frame} onCopy={onCopy} ignored={ignored} />
+        </Pop>
       ) : null}
 
-      {frame.check ? <Found frame={frame} onCopy={onCopy} /> : null}
-
-      {onDelete ? (
-        <button
-          className="st-btn st-btn--gone"
-          onClick={onDelete}
-          title="Throw this frame away. Its file goes to .designbook/.trash"
-        >
-          Delete frame
-        </button>
+      {/* Every action under one button, and that button is always the last thing on the
+          bar.
+          Laid out in a row they were seven buttons wide and the bar ran past the window,
+          so the last of them was cut in half by the edge: a button you can see and
+          cannot press is worse than one you cannot see. A list opens upward and is as
+          long as it needs to be. It stays at the end whatever else the bar is showing,
+          so it is in the same place every time you reach for it. */}
+      {acts.length || onDelete ? (
+        <Pop label={<HamburgerIcon />} title="The size, the file, and what can be done to this frame">
+          <h4>Size</h4>
+          <SizeMenu frame={frame} onResize={onResize} onFit={onFit} />
+          {/* The file is not listed here. It is what the copy button beside the name
+              puts on the clipboard, which is the only thing anybody does with it. */}
+          <h4>This frame</h4>
+          <div className="st-pop-acts">
+            {acts.map(a => (
+              <button key={a.label} className={a.on ? 'is-on' : ''} title={a.title} onClick={a.run}>
+                {a.label}
+                {a.on ? <i className="st-tick is-on" /> : null}
+              </button>
+            ))}
+            {/* Last, and marked: the one thing in here you cannot take back by pressing
+                it again. */}
+            {onDelete ? (
+              <button
+                className="is-gone"
+                title="Throw this frame away. Its file goes to .designbook/.trash"
+                onClick={onDelete}
+              >
+                Delete frame
+              </button>
+            ) : null}
+          </div>
+        </Pop>
       ) : null}
     </div>
   );
 }
 
-// What the last look found, worst first, in the words of what is wrong. The copy button
-// is the point of it: the whole list goes to Claude, which can fix it where it lives.
-function Found({ frame, onCopy }) {
+// Kinds of finding this person has said they do not want to see.
+//
+// Per board and per person, in the browser. It is a decision about what you are willing
+// to look at, not about the work: writing it into the `.designbook` file would put it in
+// everybody's diff and quietly change what the check reports for the whole team. Nothing
+// is deleted either way, so the line at the foot brings them all back.
+function useIgnored(storageKey) {
+  const key = 'st-ignore:' + storageKey;
+  const [kinds, setKinds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(key) || '[]')); } catch (_) { return new Set(); }
+  });
+  const save = next => {
+    setKinds(next);
+    try { localStorage.setItem(key, JSON.stringify([...next])); } catch (_) {}
+  };
+  return {
+    kinds,
+    hide: kind => save(new Set([...kinds, kind])),
+    showAll: () => save(new Set())
+  };
+}
+
+function Found({ frame, onCopy, ignored }) {
   const check = frame.check;
   if (check.failed) return <p className="st-note-line st-bad">Could not check it: {check.failed}</p>;
   const issues = check.issues || [];
   if (!issues.length) return <p className="st-note-line">Nothing found.</p>;
 
+  // `||` on a rank of zero is the bug that kept the worst findings at the bottom: `bad`
+  // ranks 0, and `0 || 2` is 2, so every bad one sorted as though its severity were
+  // unknown and the list opened on whatever happened to be first.
   const order = { bad: 0, warn: 1 };
-  const sorted = [...issues].sort((a, b) => (order[a.severity] || 2) - (order[b.severity] || 2));
+  const rank = i => (i.severity in order ? order[i.severity] : 2);
+  const sorted = [...issues].sort((a, b) => rank(a) - rank(b));
+  const shown = sorted.filter(i => !ignored.kinds.has(i.kind));
+  const quiet = sorted.length - shown.length;
 
+  // What you can see, not what was found: a kind you have dismissed is one you have said
+  // you are not acting on, and pasting it to an agent anyway asks for work you turned down.
   const asText = () => [
     `${frame.title} (${frame.width} x ${frame.height})`,
     frame.path ? frame.path : '',
     '',
-    ...sorted.map(i => {
+    ...shown.map(i => {
       const many = i.count > 1 ? ` (${i.count} places${i.also && i.also.length ? `: ${i.also.join(', ')}` : ''})` : '';
       return `- ${i.kind}: ${i.what ? `"${i.what}" ` : ''}${i.detail}${many}${i.where ? ` [${i.where}]` : ''}`;
     }),
@@ -1095,22 +1464,56 @@ function Found({ frame, onCopy }) {
     'Fix these in that file, then check the frame again.'
   ].filter(l => l !== undefined).join('\n');
 
+  const worst = shown.filter(i => i.severity === 'bad').length;
+
+  // It used to be a shut `<details>` inside the panel, because it was the longest thing
+  // there and the least often wanted. It opens from the bar now, so the opening is
+  // already done and a second one inside it is a door behind a door: this is the list.
   return (
-    <div className="st-warnings">
-      <div className="st-warnings-head">
-        <b>{issues.length} to look at</b>
-        <span className="st-grow" />
-        <button className="st-btn" onClick={() => onCopy && onCopy(frame.id, asText())}>Copy</button>
+    <div className="st-findings">
+      <div className="st-findings-head">
+        <span>
+          {shown.length} to look at
+          {worst ? <i className="st-findings-bad">{worst} bad</i> : null}
+        </span>
+        <button
+          className="st-findings-copy"
+          title="The whole list, to paste into Claude, which can fix them where they live"
+          onClick={() => onCopy && onCopy(frame.id, asText())}
+        >
+          Copy
+        </button>
       </div>
-      <ul className="st-found-list">
-        {sorted.map((i, n) => (
+      <ul className="st-findings-list">
+        {shown.map((i, n) => (
           <li key={n} className={i.severity === 'bad' ? 'is-bad' : ''}>
-            <b>{i.kind}{i.count > 1 ? ` (${i.count})` : ''}</b>
-            {i.what ? <q>{i.what}{i.also && i.also.length ? `, ${i.also.join(', ')}` : ''}</q> : null}
-            <em>{i.detail}</em>
+            <span className="st-findings-dot" aria-hidden="true" />
+            <div className="st-findings-what">
+              <b>
+                {i.kind}
+                {i.count > 1 ? <i className="st-findings-count">{i.count}</i> : null}
+              </b>
+              {i.what ? <q>{i.what}{i.also && i.also.length ? `, ${i.also.join(', ')}` : ''}</q> : null}
+              <em>{i.detail}</em>
+            </div>
+            {/* Silences this kind, not this one finding: the same thing wrong in ten
+                places is ten rows, and dismissing them one at a time is not dismissing
+                anything. */}
+            <button
+              className="st-findings-hide"
+              title={`Stop showing "${i.kind}" on this board`}
+              onClick={() => ignored.hide(i.kind)}
+            >
+              &times;
+            </button>
           </li>
         ))}
       </ul>
+      {quiet ? (
+        <button className="st-findings-back" onClick={ignored.showAll}>
+          {quiet} hidden &middot; show {quiet === 1 ? 'it' : 'them'} again
+        </button>
+      ) : null}
     </div>
   );
 }

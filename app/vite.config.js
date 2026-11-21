@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { studioPlugin } from './tools/studio-plugin.js';
@@ -65,8 +66,26 @@ function repoAliases() {
   return out;
 }
 
+// Each board optimizes into its own folder.
+//
+// Vite keeps its prebundled dependencies in one cache under the project root and stamps
+// them with a hash of the config. This config's aliases are the board's: `@studio` is the
+// board folder, and the rest come from the repo's own tsconfig. So every board has a
+// different config hash while sharing one cache, and opening a second board threw away
+// the bundles the first one was serving: its page answered 504 Outdated Optimize Dep, and
+// a board opened in the middle of that came up blank. Reloading the window made one board
+// the only one again, which is why reloading looked like the fix.
+//
+// Named after the board, not after its hash alone, so the folder says which board it is
+// when somebody looks.
+const cacheDir = path.join(
+  appRoot, 'node_modules', '.vite',
+  `${path.basename(path.dirname(studioRoot)) || 'board'}-${crypto.createHash('sha1').update(studioRoot).digest('hex').slice(0, 8)}`
+);
+
 export default defineConfig({
   root: appRoot,
+  cacheDir,
   plugins: [react(), studioPlugin({ appRoot, studioRoot, repoRoot, boardFile })],
   resolve: {
     alias: { '@studio': studioRoot, ...repoAliases() },

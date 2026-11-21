@@ -134,10 +134,41 @@ async function calm(page) {
 export async function draw(page, url, { wait = 700, timeout = 60000, still = false } = {}) {
   const res = await page.goto(url, { waitUntil: 'networkidle2', timeout }).catch(() => null);
   await page.evaluate(() => (document.fonts ? document.fonts.ready : null)).catch(() => {});
+  await pictures(page);
   await new Promise(r => setTimeout(r, wait));
   await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))).catch(() => {});
   if (still) await settle(page);
   return res;
+}
+
+// Every picture on the page, drawn.
+//
+// `networkidle2` lets two requests still be in flight and says nothing about decoding, so
+// a page whose photographs had arrived but not yet been painted was captured without them:
+// the board showed a food list with its thumbnails in the live frame and the same list with
+// empty wells in its picture, which reads as the design being wrong rather than the picture
+// being early.
+//
+// Each image is waited on by itself and the wait is capped, because one that never loads
+// must not hold the whole page: what it ends as is a missing picture either way, and that
+// is the honest thing to draw.
+export async function pictures(page, ms = 8000) {
+  await page.evaluate(limit => {
+    const shots = [...document.images].filter(img => !img.complete || !img.naturalWidth);
+    if (!shots.length) return;
+    return Promise.race([
+      Promise.all(shots.map(img => new Promise(done => {
+        img.addEventListener('load', done, { once: true });
+        img.addEventListener('error', done, { once: true });
+      }))),
+      new Promise(done => setTimeout(done, limit))
+    ]);
+  }, ms).catch(() => {});
+  // Decoded, not merely fetched: an image that has loaded is still not on the screen until
+  // the browser has turned it into pixels.
+  await page.evaluate(() => Promise.all(
+    [...document.images].map(img => (img.decode ? img.decode().catch(() => {}) : null))
+  )).catch(() => {});
 }
 
 // Waiting until the page is the page, and not the thing it shows on the way there.

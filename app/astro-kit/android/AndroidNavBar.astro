@@ -1,0 +1,89 @@
+---
+// The system's own bar at the very bottom of an Android screen: the gesture handle, or the
+// back, home and recents buttons.
+//
+// The one thing got wrong without it is which bar this is. This is the operating system,
+// not the app. The app's tabs are AndroidBottomBar and they sit above this. A phone on
+// gestures gives the app 24 of this; a phone on buttons takes 48, which is a whole row of
+// content, so a screen that is tight at the bottom is tight only on one of them.
+
+const {
+  style = 'gesture',
+  tint = 'dark',
+  scheme = 'light'
+} = Astro.props;
+---
+
+<div class="sysbar" data-scheme={scheme} data-style={style} data-tint={tint}>
+  {style === 'gesture' && <span class="handle"></span>}
+
+  {style === 'buttons' && (
+    <span class="buttons">
+      <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M14.5 5 7.5 12l7 7z" />
+      </svg>
+      <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="6.5" />
+      </svg>
+      <svg class="glyph" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="6" y="6" width="12" height="12" rx="1.5" />
+      </svg>
+    </span>
+  )}
+</div>
+
+<style>
+  .sysbar {
+    /* The system's own bar is the bottom of the screen. It is what `--db-safe-bottom` keeps
+       room for, so it sits under everything the app draws. */
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    /* Gestures take 24, the three buttons take 48. Both are Android's own values. */
+    --sys-height: var(--db-android-gesture-h, 24px);
+    --sys-ink: var(--db-text, #152233);
+
+    height: var(--sys-height);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--sys-ink);
+    flex: none;
+  }
+
+  .sysbar[data-style='buttons'] {
+    --sys-height: var(--db-android-buttons-h, 48px);
+  }
+
+  /* On a dark screen the system draws its handle and buttons light. The bar itself stays
+     transparent either way, because what is behind it is the app. */
+  .sysbar[data-tint='light'] {
+    --sys-ink: var(--db-on-primary, #FFFFFF);
+  }
+
+  /* 32 wide and 4 thick, centred: the gesture handle at Android's size. */
+  .handle {
+    width: var(--db-android-handle-w, 32px);
+    height: var(--db-android-handle-h, 4px);
+    border-radius: var(--db-radius-full, 999px);
+    background: currentColor;
+    opacity: 0.9;
+  }
+
+  .buttons {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* The three buttons are spread across the bar, not bunched in the middle. */
+    gap: var(--db-space-12, 48px);
+  }
+
+  .glyph {
+    width: var(--db-android-icon, 24px);
+    height: var(--db-android-icon, 24px);
+    display: block;
+    fill: currentColor;
+  }
+</style>

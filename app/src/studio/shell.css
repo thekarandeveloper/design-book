@@ -126,6 +126,10 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .st-btn:hover { background: var(--st-hover); }
 .st-btn--go { background: var(--st-accent); border-color: var(--st-accent); color: #fff; }
+/* A standing choice that is on, rather than something being done now. Quieter than
+   `--go`: a filled button beside the zoom reads as a thing to press, and this one is
+   already pressed. */
+.st-btn--on { background: var(--st-hover); color: var(--st-ink); }
 .st-btn:disabled { opacity: 0.5; cursor: default; }
 
 .st-icon {
@@ -141,6 +145,105 @@ html, body, #root { height: 100%; margin: 0; }
 }
 .st-icon:hover { background: var(--st-hover); }
 .st-icon.is-on { background: var(--st-accent); border-color: var(--st-accent); color: #fff; }
+
+/* ── the board's history ──────────────────────────────────────────────────
+ * In the bar, so it looks like the bar's own: the same tile as the components button,
+ * with a word beside the mark because "history" is not a thing a symbol says. */
+
+.st-history { position: relative; display: flex; }
+
+.st-pillbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--st-line);
+  border-radius: 6px;
+  background: var(--st-raise);
+  color: var(--st-ink);
+  font: 500 11px/1 inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.st-pillbtn:hover { background: var(--st-hover); }
+.st-pillbtn.is-open { background: var(--st-accent); border-color: var(--st-accent); color: #fff; }
+.st-pillbtn svg { flex: none; opacity: 0.85; }
+
+/* Under the bar, not inside it. */
+.st-history-menu {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  width: 310px;
+  max-height: 60vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
+  border: 1px solid var(--st-line);
+  border-radius: 10px;
+  background: var(--st-panel);
+  box-shadow: 0 22px 60px var(--st-shade);
+  z-index: 40;
+  cursor: default;
+}
+.st-history-head,
+.st-history-none {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--st-muted);
+}
+.st-history-head b { color: var(--st-ink); font-weight: 600; }
+
+.st-history-list { margin: 0; padding: 0; list-style: none; }
+.st-history-list li + li { border-top: 1px solid var(--st-line); }
+
+.st-history-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--st-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.st-history-row:hover { background: var(--st-hover); }
+.st-history-row:disabled { opacity: 0.5; cursor: default; }
+
+.st-history-dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--st-line);
+}
+.st-history-dot[data-now] { background: var(--st-accent); }
+
+.st-history-what { display: grid; gap: 2px; min-width: 0; }
+.st-history-what b {
+  font-size: 11px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.st-history-what em { font-style: normal; font-size: 10px; color: var(--st-faint); }
+
+.st-history-sure {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 8px;
+  font-size: 11px;
+  color: var(--st-muted);
+}
+.st-history-sure span { flex: 1; }
 
 .st-zoom { display: flex; align-items: center; border: 1px solid var(--st-line); border-radius: 6px; overflow: hidden; }
 .st-zoom .st-btn { border: 0; border-radius: 0; }
@@ -183,6 +286,11 @@ html, body, #root { height: 100%; margin: 0; }
 .st-menu-item.is-on { background: var(--st-accent); color: #fff; cursor: default; }
 .st-menu-item em { margin-left: auto; font-style: normal; font-size: 10px; opacity: 0.7; }
 .st-menu-note { padding: 6px 8px; font-size: 11px; color: var(--st-muted); }
+/* The same menu, at the pointer rather than under a button. `position: fixed`, because
+   the pointer's coordinates are the window's, not whatever happens to be scrolled. */
+.st-pointed { position: fixed; right: auto; top: auto; min-width: 180px; z-index: 60; }
+.st-menu-item--bad { color: var(--st-bad, #ff6b6b); }
+.st-menu-item--bad:hover { background: color-mix(in srgb, var(--st-bad, #ff6b6b) 16%, transparent); }
 .st-menu--wide { width: 232px; max-height: 60vh; overflow: auto; }
 .st-menu-item:disabled { opacity: 0.5; cursor: default; }
 .st-menu-size { display: flex; align-items: center; gap: 6px; padding: 4px 8px 8px; }
@@ -205,11 +313,9 @@ html, body, #root { height: 100%; margin: 0; }
   min-height: 0;
   overflow: hidden;
   cursor: grab;
+  /* No grid. It was two repeating gradients behind every frame, and on a board of
+     screens it is a pattern competing with the work rather than a measure of it. */
   background-color: var(--st-bg);
-  background-image:
-    linear-gradient(var(--st-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--st-line) 1px, transparent 1px);
-  background-size: 48px 48px, 48px 48px;
 }
 .st-board.is-panning { cursor: grabbing; }
 .st-world { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
@@ -227,7 +333,9 @@ html, body, #root { height: 100%; margin: 0; }
    is tinted, and a rule runs the width of the board between them. A division you have to
    look for is not a division. */
 .st-section { position: absolute; pointer-events: none; }
-.st-section.is-odd { background: var(--st-band); }
+/* No band of colour behind a section. Alternating them striped the board, and a stripe
+   behind the work competes with the work; the line and the name already say where one
+   section ends and the next begins. */
 .st-rule {
   position: absolute;
   left: 0; right: 0; top: 0;
@@ -244,6 +352,10 @@ html, body, #root { height: 100%; margin: 0; }
    because it is a heading and not a control: at 15px bold in a padded card with a chip
    beside it, it read as an object somebody had dropped on the board rather than as the
    name of what is under it. */
+/* The section a new frame would go into. Marked rather than filled: a section bar is
+   over the work, and a block of colour there is a block over the work. */
+.st-band-bar.is-chosen { border-color: var(--st-accent); color: var(--st-ink); }
+
 .st-band-bar {
   position: absolute;
   left: 0;
@@ -386,7 +498,22 @@ html, body, #root { height: 100%; margin: 0; }
   z-index: 4;
 }
 
-.st-frame-bar b { font-size: 12px; font-weight: 600; }
+/* The name gives way, everything else stays whole.
+   The bar is capped at the width of the frame it names and clips what does not fit, and
+   a flex child does not shrink below its content unless it is told to, so a long name
+   pushed the issue count and the menu button out of the bar and was itself cut off in
+   the middle of a letter. The name is the only thing here that can be shortened without
+   being lost, so it is the thing that shortens. */
+.st-frame-bar b {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.st-frame-bar .st-found,
+.st-frame-bar .st-bar-more { flex: none; }
 .st-name-input {
   font: 600 12px/1 inherit;
   color: var(--st-ink);
@@ -508,14 +635,16 @@ html, body, #root { height: 100%; margin: 0; }
 
 /* ── inspector ───────────────────────────────────────────────────────── */
 
+/* Under the corner button, not behind it. */
 .st-inspector {
   position: absolute;
   right: 12px;
-  top: 12px;
-  width: 212px;
+  top: 50px;
+  width: 248px;
   max-height: calc(100% - 90px);
   overflow: auto;
-  padding: 10px;
+  overscroll-behavior: contain;
+  padding: 12px;
   border-radius: 10px;
   background: var(--st-veil);
   border: 1px solid var(--st-line);
@@ -527,9 +656,15 @@ html, body, #root { height: 100%; margin: 0; }
 .st-inspector header { display: flex; align-items: center; gap: 8px; }
 .st-inspector header b { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-inspector .st-x { margin-left: auto; border: 0; background: transparent; color: var(--st-muted); font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px; }
-.st-inspector .st-row { display: flex; gap: 6px; }
-.st-inspector label { flex: 1; display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--st-muted); }
-.st-inspector input {
+/* The panel these were written for is gone and its rows live in the popovers over the
+   bar now. Without the second selector a number field falls back to the browser's own
+   white box, which overflows its row and wraps the pair onto two lines. */
+.st-inspector .st-row,
+.st-pop-body .st-row { display: flex; gap: 6px; }
+.st-inspector label,
+.st-pop-body label { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--st-muted); }
+.st-inspector input,
+.st-pop-body input[type="number"] {
   width: 100%; min-width: 0; height: 26px; padding: 0 6px;
   border: 1px solid var(--st-line); border-radius: 5px;
   background: var(--st-raise); color: var(--st-ink); font: inherit; font-size: 12px;
@@ -594,11 +729,33 @@ html, body, #root { height: 100%; margin: 0; }
 
 /* ── documents (gallery, system) ─────────────────────────────────────── */
 
-.st-doc { flex: 1; overflow: auto; padding: 24px 28px 64px; }
-.st-doc .st-doc-inner { max-width: 1180px; }
-.st-doc h2 { margin: 28px 0 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--st-muted); }
-.st-doc .st-native { margin: 0 0 10px; font-size: 11px; color: var(--st-faint); }
-.st-doc .st-note-line { margin: 0 0 10px; font-size: 12px; color: var(--st-muted); }
+/* The bar floats over this page rather than sitting above it, so the page has to leave
+   room for it: 12 down, about 38 tall, and then air. Without that the first heading
+   started under the bar and the page read as though it had been cut off at the top. */
+.st-doc {
+  flex: 1;
+  overflow: auto;
+  padding: 76px 28px 96px;
+}
+/* Centred, because the bar it sits under is centred: a column hard against the left
+   edge below a middled bar reads as a mistake even when every measurement is right. */
+.st-doc .st-doc-inner { max-width: 1180px; margin: 0 auto; }
+
+/* A section heading, and the lines that explain it. The run of them is what makes this
+   page readable, so the space above a heading is big enough to be a break and the words
+   under it are narrow enough to be read. */
+.st-doc h2 {
+  margin: 44px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--st-muted);
+}
+.st-doc .st-doc-inner > h2:first-child { margin-top: 0; }
+.st-doc .st-native { margin: 0 0 10px; max-width: 70ch; font-size: 11px; line-height: 1.6; color: var(--st-faint); }
+.st-doc .st-note-line { margin: 0 0 18px; max-width: 70ch; font-size: 12px; line-height: 1.7; color: var(--st-muted); }
+.st-doc code { padding: 1px 5px; border-radius: 4px; background: var(--st-raise); font-size: 0.92em; }
 
 .st-specs { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
 .st-spec { border: 1px solid var(--st-line); border-radius: 10px; overflow: hidden; background: var(--st-panel); }
@@ -607,6 +764,105 @@ html, body, #root { height: 100%; margin: 0; }
 .st-spec > header code { font-size: 10px; color: var(--st-muted); }
 .st-spec .st-stage { padding: 16px; background: var(--surface); color: var(--text-primary); }
 .st-spec .st-props { padding: 8px 10px; border-top: 1px solid var(--st-line); font-size: 10px; color: var(--st-muted); word-break: break-word; }
+
+/* ── colour, as a wall of tiles ───────────────────────────────────────────
+ * Big enough to judge, small enough that a hundred and forty fit on a screen. The tile is
+ * the control: the colour input is laid over it and made invisible, so pressing the
+ * colour opens the picker rather than pressing a small square beside it. */
+
+.st-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
+  gap: 10px;
+  margin: 0 0 8px;
+}
+
+.st-chip {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--st-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.st-chip-art {
+  position: relative;
+  display: block;
+  height: 56px;
+  border-radius: 8px;
+  border: 1px solid var(--st-line);
+  /* A pale colour on a pale panel has no edge of its own, and a dark one on dark has
+     none either; the chequer behind shows through anything transparent. */
+  background-image:
+    linear-gradient(45deg, #2a2d31 25%, transparent 25%, transparent 75%, #2a2d31 75%),
+    linear-gradient(45deg, #2a2d31 25%, transparent 25%, transparent 75%, #2a2d31 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 5px 5px;
+  overflow: hidden;
+}
+.st-chip:hover .st-chip-art { border-color: var(--st-edge); }
+
+.st-chip-art input[type="color"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.st-chip b {
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--st-muted);
+}
+.st-chip i { font-style: normal; font-size: 9px; color: var(--st-faint); }
+.st-chip.is-flat { cursor: pointer; }
+.st-chip.is-done b { color: var(--st-accent); }
+
+/* ── the faces the project asks for ─────────────────────────────────────── */
+
+.st-faces {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 12px;
+}
+.st-face {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--st-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.st-face-art {
+  display: grid;
+  place-items: center;
+  height: 92px;
+  border: 1px solid var(--st-line);
+  border-radius: 10px;
+  background: var(--st-panel);
+  font-size: 34px;
+  line-height: 1;
+}
+.st-face:hover .st-face-art { border-color: var(--st-edge); }
+.st-face b { font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-face i { font-style: normal; font-size: 10px; color: var(--st-faint); }
 
 .st-swatches { display: grid; grid-template-columns: repeat(13, 1fr); gap: 3px; }
 .st-swatch { height: 38px; border-radius: 4px; border: 1px solid var(--st-line); }
@@ -658,34 +914,366 @@ html, body, #root { height: 100%; margin: 0; }
 
 /* The board's own controls, over the board rather than in the top bar: a board can be
  * shown in a panel that has no top bar of its own. */
-.st-boardbar {
+/* The board's own menu, bottom right, opposite the fit button. */
+.st-boardmenu {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+}
+.st-boardmenu .st-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--st-veil);
+  backdrop-filter: blur(10px);
+}
+.st-boardmenu .st-btn:hover { border-color: var(--st-edge); }
+/* With a frame chosen the bar takes this corner, so the menu steps aside rather than
+   sitting under it. */
+.st-board:has(.st-selbar) .st-boardmenu { right: auto; left: 60px; }
+
+/* A page inside the menu: a path across the top that stays, and one thing under it that
+   scrolls. The popover scrolled as a whole before, which meant the path scrolled away
+   and the list did not scroll at all once the popover had hit its own limit. */
+.st-pop-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 60vh;
+}
+.st-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--st-line);
+  font-size: 11px;
+}
+.st-crumbs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--st-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.st-crumbs button:hover { background: var(--st-hover); color: var(--st-ink); }
+.st-crumbs button span { font-size: 13px; line-height: 1; }
+.st-crumbs i { font-style: normal; color: var(--st-faint); }
+.st-crumbs b { font-weight: 600; color: var(--st-ink); }
+
+.st-history-inline {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: 8px;
+}
+.st-history-inline .st-history-head { flex: none; margin-bottom: 6px; }
+.st-history-inline .st-history-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* The grid, when somebody turns it on. */
+.st-board.is-ruled {
+  background-image:
+    linear-gradient(var(--st-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--st-line) 1px, transparent 1px);
+  background-size: 48px 48px, 48px 48px;
+}
+
+/* Fit everything, bottom left: the corner opposite the work, and the only control the
+   view needs that the wheel and the drag do not already give. Same tile as the two in
+   the top corners, because it is the same kind of thing. */
+.st-fit {
   position: absolute;
   left: 12px;
   bottom: 12px;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--st-line);
+  border-radius: 10px;
+  background: var(--st-veil);
+  color: var(--st-ink);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+.st-fit:hover { border-color: var(--st-edge); background: var(--st-hover); }
+
+/* ── what can be done to the chosen frame ─────────────────────────────────
+ * Along the bottom, in the middle, and only when something is chosen. */
+
+.st-selbar {
+  position: absolute;
+  /* Right, opposite the fit button, and at the same height as it: the bottom edge is one
+     row, and the two things on it sit at its two ends rather than one of them wandering
+     to the middle. */
+  right: 12px;
+  bottom: 12px;
+  max-width: calc(100% - 72px);
   display: flex;
+  align-items: center;
   gap: 6px;
   padding: 6px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--st-veil);
   border: 1px solid var(--st-line);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 18px 40px var(--st-shade);
+  z-index: 6;
 }
+
+/* What is chosen: the frame, and the element inside it when there is one. One line, and
+   the element is the part that gives way, because the frame's name is the shorter and
+   the steadier of the two. */
+.st-selbar-what {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  max-width: 300px;
+  padding-left: 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.st-selbar-what b {
+  flex: none;
+  font-weight: 600;
+  color: var(--st-ink);
+}
+.st-selbar-what span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--st-ink);
+}
+.st-selbar-sep { font-style: normal; color: var(--st-faint); }
+
+.st-selbar-copy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--st-muted);
+  cursor: pointer;
+}
+.st-selbar-copy:hover { background: var(--st-hover); color: var(--st-ink); }
+
+.st-selbar-rule {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--st-line);
+}
+.st-selbar .st-btn { flex: none; }
+
+/* ── what opens over the bar ──────────────────────────────────────────────
+ * Upward, because the bar is at the bottom of the window. */
+
+.st-pop { position: relative; flex: none; }
+
+.st-pop-body {
+  position: absolute;
+  /* From the right, because the bar is against the right edge now: anchored left, a
+     300-wide popover near that edge hangs off the window. */
+  right: 0;
+  bottom: calc(100% + 8px);
+  min-width: 210px;
+  max-height: 60vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--st-line);
+  background: var(--st-panel);
+  box-shadow: 0 22px 60px var(--st-shade);
+  display: grid;
+  gap: 8px;
+}
+.st-pop-body.is-wide { min-width: 300px; }
+/* A popover holding its own scrolling page does not scroll as well: two scrollers in
+   each other is how a list ends up unable to move. */
+.st-pop-body:has(.st-pop-page) { overflow: visible; max-height: none; }
+
+.st-pop-body > h4 {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--st-muted);
+}
+.st-pop-body > h4 ~ h4 { margin-top: 2px; }
+
+.st-pop-line {
+  margin: 0;
+  font-size: 11px;
+  color: var(--st-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The count on a button that opens something: how much is in there. */
+.st-pop-chip {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--st-warn);
+  color: #1a1407;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.st-pop-acts { display: grid; gap: 1px; }
+.st-pop-acts button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--st-ink);
+  font: 400 12px/1.2 inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.st-pop-acts button:hover { background: var(--st-hover); }
+/* Red, not amber: amber is the colour of something to look at, and this is the one row
+   in here that does not undo. */
+.st-pop-acts .is-gone { margin-top: 3px; border-top: 1px solid var(--st-line); border-radius: 0 0 6px 6px; color: var(--st-danger); }
+.st-pop-acts .is-gone:hover { background: color-mix(in srgb, var(--st-danger) 16%, transparent); }
+
+/* Dismissing a kind of finding, and getting them all back. */
+.st-findings-hide {
+  flex: none;
+  align-self: flex-start;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--st-faint);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+.st-findings-list li:hover .st-findings-hide,
+.st-findings-hide:focus-visible { opacity: 1; }
+.st-findings-hide:hover { background: var(--st-hover); color: var(--st-ink); }
+
+.st-findings-back {
+  width: 100%;
+  padding: 6px 0 0;
+  border: 0;
+  border-top: 1px solid var(--st-line);
+  background: none;
+  color: var(--st-muted);
+  font: 400 11px/1.3 inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.st-findings-back:hover { color: var(--st-ink); }
+.st-pop-acts .st-tick,
+.st-pop-acts .st-toggle,
+.st-pop-acts .st-pop-go { margin-left: auto; }
+
+/* On or off, said as a switch. (`.st-sw` was taken: it is a 9px swatch dot elsewhere,
+   and it won, so the switch came out as a small blue square with a loose circle.) A tick on its own does not say the other state exists:
+   one row ticked and one not reads as one row missing something. */
+.st-toggle {
+  position: relative;
+  width: 26px;
+  height: 15px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--st-line);
+  transition: background 0.14s ease;
+}
+.st-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: var(--st-ink);
+  transition: transform 0.14s ease;
+}
+.st-toggle.is-on { background: var(--st-accent); }
+.st-toggle.is-on::after { transform: translateX(11px); background: #fff; }
+
+.st-pop-go { font-style: normal; color: var(--st-faint); }
+
+/* Going back out of a page inside the menu. */
+.st-pop-back { display: flex; align-items: center; gap: 8px; }
+.st-pop-back h4 {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--st-muted);
+}
+.st-pop-back button {
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--st-muted);
+  font: 500 11px/1 inherit;
+  cursor: pointer;
+}
+.st-pop-back button:hover { background: var(--st-hover); color: var(--st-ink); }
+
+.st-btn--gone { color: var(--st-warn); }
+.st-btn--gone:hover { background: color-mix(in srgb, var(--st-warn) 16%, transparent); }
 
 /* ── thumbnail grid ──────────────────────────────────────────────────── */
 
 .st-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
-  gap: 12px;
+  /* Wider tiles and more air between them: a reference is a thing you look at, and at
+     196 with 12 between them they read as a contact sheet rather than as the work. */
+  grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  gap: 20px;
 }
+.st-empty-line { margin: 0 0 20px; font-size: 12px; color: var(--st-muted); }
+.st-empty-line b { color: var(--st-ink); }
 
 .st-tile {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0;
+  gap: 6px;
+  padding: 0 0 10px;
   border: 1px solid var(--st-line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--st-panel);
   color: var(--st-ink);
   font: inherit;
@@ -703,7 +1291,15 @@ html, body, #root { height: 100%; margin: 0; }
   place-items: center;
   overflow: hidden;
   background: var(--st-sunk);
+  border: 0;
   border-bottom: 1px solid var(--st-line);
+  /* It is a button now, so its own defaults have to go: a button brings a font, a
+     padding and a width of its own, and a grid of them would stop lining up. */
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
 }
 .st-tile-art em {
   font-style: normal;
@@ -1114,6 +1710,19 @@ html, body, #root { height: 100%; margin: 0; }
 /* The components drawer: its own button, in the corner opposite the board's controls. */
 /* The corner the new-frame button lives in, and the menu that opens up out of it. */
 .st-picker--corner { position: absolute; right: 14px; bottom: 14px; z-index: 6; }
+/* Top right, left of the zoom and the rescan button, and there whatever is chosen: the
+   one thing on this board you reach for without having selected anything first. Its menu
+   opens downwards, which is the default, so it needs no `--up`. */
+/* Top right, on its own. It is the one thing on this board you reach for without having
+   selected anything first, so it gets the corner. */
+.st-picker--top { position: absolute; right: 12px; top: 12px; z-index: 20; }
+/* Which section the frame is going into, at the head of the menu. */
+.st-menu-where {
+  border-bottom: 1px solid var(--st-line);
+  margin-bottom: 2px;
+  color: var(--st-ink);
+  font-weight: 500;
+}
 .st-menu--up { top: auto; bottom: calc(100% + 8px); }
 
 .st-floater {
@@ -1121,16 +1730,18 @@ html, body, #root { height: 100%; margin: 0; }
   align-items: center;
   gap: 7px;
   width: auto;
-  height: 32px;
-  padding: 0 13px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  justify-content: center;
   border: 1px solid var(--st-line);
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--st-veil);
+  backdrop-filter: blur(10px);
   color: var(--st-ink);
   font: 12px/1 -apple-system, system-ui, sans-serif;
   font-weight: 500;
   cursor: pointer;
-  box-shadow: 0 10px 30px var(--st-shade);
 }
 .st-floater:hover { border-color: var(--st-edge); }
 .st-floater.is-on { background: var(--st-accent); border-color: var(--st-accent); color: #fff; }
@@ -1261,27 +1872,28 @@ html, body, #root { height: 100%; margin: 0; }
 .st-context-item:hover { background: var(--st-hover); }
 .st-context-item.is-gone:hover { background: var(--st-danger); color: #fff; }
 
-/* Scan the repo again. Top right, the corner the board's own controls do not use, and
-   the opposite corner to the new frame button: one is about the repo, the other is
-   about this board. */
+/* Scan the repo again. Top left, the opposite corner to the new frame button: one is
+   about the repo, the other is about this board. */
 .st-rescan {
   position: absolute;
   top: 12px;
-  right: 12px;
+  left: 12px;
   z-index: 20;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
+  /* The bar's own material: the same hairline, the same veil over a blur, the same 10.
+     These three float over the board at the same height and are the same kind of thing,
+     so they are the same tile. */
   border: 1px solid var(--st-line);
-  border-radius: 999px;
+  border-radius: 10px;
   background: var(--st-veil);
   color: var(--st-ink);
   cursor: pointer;
   backdrop-filter: blur(10px);
-  box-shadow: 0 10px 30px var(--st-shade);
 }
-.st-rescan:hover { border-color: var(--st-edge); }
+.st-rescan:hover { border-color: var(--st-edge); background: var(--st-hover); }
 .st-rescan.is-busy { color: var(--st-muted); cursor: default; }
 .st-rescan.is-busy svg { animation: st-turn 1.1s linear infinite; }
 
@@ -1293,8 +1905,8 @@ html, body, #root { height: 100%; margin: 0; }
    doing and what it has found so far. */
 .st-scanning {
   position: absolute;
-  top: 52px;
-  right: 12px;
+  top: 48px;
+  left: 12px;
   z-index: 20;
   width: 244px;
   padding: 12px 14px 13px;
@@ -1457,21 +2069,100 @@ html, body, #root { height: 100%; margin: 0; }
   background: var(--st-warn);
   color: #1a1407;
 }
-.st-found-list {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 8px 0 0;
-  list-style: none;
-  max-height: 280px;
-  overflow: auto;
-  border-top: 1px solid var(--st-line);
+/* ── what a check found ───────────────────────────────────────────────────
+ * One finding per row: how bad it is, what kind it is, the words it is about, and what
+ * is wrong with them. A hairline between rows and nothing else drawn: a list of problems
+ * is hard enough to read without boxes round every line. */
+
+.st-findings { display: grid; gap: 8px; }
+
+.st-findings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--st-ink);
 }
-.st-found-list li { display: grid; gap: 2px; font-size: 11px; color: var(--st-muted); }
-.st-found-list b { font-size: 11px; color: var(--st-ink); font-weight: 600; }
-.st-found-list li.is-bad b { color: var(--st-warn); }
-.st-found-list q { color: var(--st-ink); font-style: normal; }
-.st-found-list em { font-style: normal; }
+.st-findings-bad {
+  margin-left: 6px;
+  font-style: normal;
+  font-weight: 500;
+  color: var(--st-warn);
+}
+.st-findings-copy {
+  flex: none;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--st-line);
+  border-radius: 6px;
+  background: none;
+  color: var(--st-muted);
+  font: 500 11px/1 inherit;
+  cursor: pointer;
+}
+.st-findings-copy:hover { background: var(--st-hover); color: var(--st-ink); }
+
+.st-findings-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 300px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.st-findings-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+}
+.st-findings-list li + li { border-top: 1px solid var(--st-line); }
+
+/* How bad, said once, by a dot. The row's own words then carry no colour of their own,
+   which is what made the old list read as a warning about everything at once. */
+.st-findings-dot {
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--st-muted);
+}
+.st-findings-list li.is-bad .st-findings-dot { background: var(--st-warn); }
+
+.st-findings-what { display: grid; gap: 3px; min-width: 0; }
+.st-findings-what b {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--st-ink);
+}
+.st-findings-count {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--st-raise);
+  color: var(--st-muted);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+}
+.st-findings-what q {
+  font-size: 11px;
+  font-style: normal;
+  color: var(--st-ink);
+  quotes: '\201c' '\201d';
+  overflow-wrap: anywhere;
+}
+.st-findings-what em {
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+  color: var(--st-muted);
+}
 
 /* ── asking what a reference is for ───────────────────────────────────────
  * Asked while it is in front of you, because an empty note on a tile is a note
@@ -1551,10 +2242,6 @@ html, body, #root { height: 100%; margin: 0; }
 .st-select:hover { border-color: var(--st-edge); }
 .st-select:focus { outline: none; border-color: var(--st-accent); }
 
-.st-warnings { display: grid; gap: 6px; }
-.st-warnings-head { display: flex; align-items: center; gap: 8px; }
-.st-warnings-head b { font-size: 11px; color: var(--st-warn); font-weight: 600; }
-.st-warnings-head .st-btn { height: 24px; padding: 0 10px; font-size: 11px; }
 
 /* A frame slides to where it belongs when the line around it changes, and nothing
    transitions while the board is being panned or a frame dragged. */
@@ -1691,74 +2378,7 @@ html, body, #root { height: 100%; margin: 0; }
 .st-pick-chip button:hover { background: var(--st-hover); }
 
 /* The panel for what is chosen, beside the frame's own. */
-.st-pickpanel {
-  position: absolute;
-  right: 236px;
-  top: 12px;
-  width: 288px;
-  max-height: calc(100% - 90px);
-  overflow: auto;
-  padding: 10px;
-  display: grid;
-  gap: 8px;
-  border: 1px solid var(--st-line);
-  border-radius: 10px;
-  background: var(--st-veil);
-  backdrop-filter: blur(8px);
-  z-index: 5;
-  font-size: 12px;
-}
-.st-pickpanel header { display: flex; align-items: center; gap: 8px; }
-.st-pickpanel header b { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.st-pickpanel .st-x { margin-left: auto; border: 0; background: transparent; color: var(--st-muted); font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px; }
-.st-pickpanel-thumb {
-  display: grid; place-items: center; min-height: 56px; max-height: 176px; overflow: hidden;
-  border-radius: 8px; background: var(--st-sunk); color: var(--st-muted); font-size: 11px;
-}
-.st-pickpanel-thumb img { display: block; max-width: 100%; max-height: 176px; object-fit: contain; }
-.st-pickpanel-source {
-  display: flex; align-items: baseline; gap: 6px; width: 100%; padding: 5px 8px; text-align: left;
-  border: 1px solid var(--st-line); border-radius: 6px; background: var(--st-raise); color: var(--st-ink);
-  font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.st-pickpanel-source:hover { background: var(--st-hover); }
-.st-pickpanel-source em { margin-left: auto; font-style: normal; font-family: -apple-system, system-ui, sans-serif; color: var(--st-muted); }
-.st-pickpanel-facts { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 0; font-size: 11px; }
-.st-pickpanel-facts dt { color: var(--st-muted); }
-.st-pickpanel-facts dd { margin: 0; color: var(--st-ink); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; }
 .st-sw { display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 3px; vertical-align: -1px; box-shadow: 0 0 0 1px var(--st-edge); }
-.st-pickpanel-issues { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 11px; color: var(--st-muted); }
-.st-pickpanel-issues li b { color: var(--st-ink); font-weight: 600; }
-.st-pickpanel-issues li.is-bad b { color: var(--st-warn); }
-.st-pickpanel-templates { display: flex; flex-wrap: wrap; gap: 4px; }
-.st-pickpanel-templates button {
-  height: 22px; padding: 0 8px; border: 1px solid var(--st-line); border-radius: 999px;
-  background: var(--st-raise); color: var(--st-ink); font: inherit; font-size: 11px; cursor: pointer;
-}
-.st-pickpanel-templates button:hover { background: var(--st-hover); }
-.st-pickpanel-note {
-  width: 100%; box-sizing: border-box; padding: 6px 8px; resize: vertical; min-height: 44px;
-  border: 1px solid var(--st-line); border-radius: 6px; background: var(--st-field); color: var(--st-ink);
-  font: inherit; font-size: 12px;
-}
-.st-pickpanel-ref { display: flex; align-items: center; gap: 8px; padding: 4px; border-radius: 6px; background: var(--st-sunk); }
-.st-pickpanel-ref img { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; }
-.st-pickpanel-ref span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--st-muted); font-size: 11px; }
-.st-pickpanel-model {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px;
-  border-radius: 6px; background: var(--st-sunk); color: var(--st-muted); font-size: 11px;
-}
-.st-pickpanel-model b { color: var(--st-ink); font-weight: 600; }
-.st-pickpanel-model button {
-  height: 20px; padding: 0 7px; border: 1px solid var(--st-line); border-radius: 5px;
-  background: var(--st-raise); color: var(--st-ink); font: 10px ui-monospace, Menlo, monospace; cursor: pointer;
-}
-.st-pickpanel .st-row { display: flex; gap: 6px; }
-.st-pickpanel .st-row .st-btn { flex: 1; }
-.st-pickpanel-more { border: 0; background: transparent; color: var(--st-muted); font: inherit; font-size: 11px; cursor: pointer; text-align: left; padding: 0; }
-.st-pickpanel-more:hover { color: var(--st-ink); }
-.st-pickpanel-extra { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.st-pickpanel .st-note-line { margin: 0; font-size: 11px; color: var(--st-muted); }
 
 .st-context-group {
   margin: 6px 8px 2px; color: var(--st-faint); font-size: 10px; font-weight: 600;
@@ -1824,3 +2444,117 @@ html, body, #root { height: 100%; margin: 0; }
 @keyframes st-pulse { 50% { opacity: 0.35; } }
 .st-compare-files li { display: flex; align-items: center; gap: 8px; }
 .st-compare-files li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* The size of a frame that is a device: a fact, not a chooser. */
+.st-inspector-size {
+  margin: 0;
+  font-size: 11px;
+  color: var(--st-dim);
+}
+
+
+/* ── One panel ──────────────────────────────────────────────────────────────
+   The frame's panel holds everything about that frame: its size, what can be
+   done with it, what the last look found, and whatever is chosen inside it.
+   There is no second box beside it any more. */
+
+.st-inspector { max-height: calc(100vh - 134px); overflow-y: auto; }
+
+/* What was found: shut until it is wanted. */
+.st-warnings { display: block; border-top: 1px solid var(--st-line); padding-top: 8px; }
+.st-warnings > summary {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; list-style: none; padding: 2px 0;
+}
+.st-warnings > summary::-webkit-details-marker { display: none; }
+/* A disclosure arrow of its own, so it reads as something that opens. */
+.st-warnings > summary::before {
+  content: ''; width: 0; height: 0; flex: none;
+  border-left: 4px solid currentColor;
+  border-top: 3.5px solid transparent; border-bottom: 3.5px solid transparent;
+  color: var(--st-muted); transition: transform 120ms ease;
+}
+.st-warnings[open] > summary::before { transform: rotate(90deg); }
+.st-warnings > summary b { font-size: 11px; color: var(--st-warn); font-weight: 600; }
+.st-warnings-bad {
+  font-style: normal; font-size: 10px; color: var(--st-bad, #e5484d);
+  border: 1px solid currentColor; border-radius: 999px; padding: 0 5px;
+}
+.st-warnings-head { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+
+/* What is chosen inside the frame: a section of this panel, not a panel. */
+.st-el { display: grid; gap: 8px; border-top: 1px solid var(--st-line); padding-top: 10px; }
+.st-el-head { display: flex; align-items: center; gap: 8px; }
+.st-el-head b { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-el-head .st-x {
+  margin-left: auto; border: 0; background: transparent; color: var(--st-muted);
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 0 2px;
+}
+  display: grid; place-items: center; min-height: 64px;
+  background: var(--st-sunk, rgba(255, 255, 255, 0.04));
+  border-radius: 8px; overflow: hidden;
+}
+.st-el-source {
+  text-align: left; border: 0; background: transparent; cursor: pointer;
+  font-size: 11px; color: var(--st-muted); padding: 0;
+}
+.st-el-source em { font-style: normal; color: var(--st-dim); margin-left: 6px; }
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 10px;
+  margin: 0; font-size: 11px;
+}
+.st-el-note {
+  width: 100%; resize: vertical; font: inherit; font-size: 11px;
+  padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--st-line); background: transparent; color: inherit;
+}
+.st-el-ref { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.st-el-ref img { width: 28px; height: 28px; object-fit: cover; border-radius: 4px; }
+.st-el-model { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--st-muted); }
+.st-el-model button {
+  border: 1px solid var(--st-line); background: transparent; color: inherit;
+  border-radius: 999px; padding: 1px 7px; font-size: 10px; cursor: pointer;
+}
+.st-el-more {
+  border: 0; background: transparent; color: var(--st-muted);
+  font-size: 11px; cursor: pointer; padding: 2px 0; text-align: left;
+}
+.st-el-extra { display: grid; gap: 6px; }
+
+
+/* ── The frame's panel ──────────────────────────────────────────────────────
+   One column of short rows: what this frame is, what can be done with it, what
+   was found, what is chosen inside it, and the one dangerous thing last. */
+
+.st-inspector-size {
+  margin: 0; font-size: 11px; color: var(--st-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Every action is this button, and they wrap, so none is ever half off the edge. */
+.st-acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.st-act {
+  flex: 0 1 auto; min-width: 0; height: 26px; padding: 0 10px;
+  border: 1px solid var(--st-line); border-radius: 999px;
+  background: transparent; color: var(--st-ink);
+  font: inherit; font-size: 11px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.st-act:hover { background: var(--st-hover); }
+.st-act--gone { color: var(--st-warn); border-color: color-mix(in srgb, var(--st-warn) 40%, transparent); }
+.st-act--gone:hover { background: color-mix(in srgb, var(--st-warn) 12%, transparent); }
+
+/* What is chosen inside the frame. No picture of it: it is on the board already, two
+   inches to the left, and taking one made every click wait on a capture. */
+.st-el-size {
+  margin: 0; font-size: 11px; color: var(--st-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The one thing the panel is for. */
+.st-el-go {
+  width: 100%; height: 30px; border-radius: 8px;
+  border: 1px solid var(--st-accent); background: var(--st-accent); color: #fff;
+  font: inherit; font-size: 12px; cursor: pointer;
+}
+.st-el-go:hover { filter: brightness(1.08); }
+.st-el-go:disabled, .st-act:disabled { opacity: 0.5; cursor: default; }

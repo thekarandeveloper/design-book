@@ -1,0 +1,143 @@
+---
+// The status bar iOS draws above every screen.
+//
+// Nothing in an app's code draws this, so every board page used to invent it, and each page
+// invented a slightly different height. It is 59 tall on a 393 x 852 iPhone, which is the
+// safe area above the content, and a screen's content starts under it.
+//
+// The glyphs are inline SVG on purpose. A text character or an emoji is whatever face the
+// machine happens to have, so it would not be the same picture on two machines.
+
+interface Props {
+  time?: string;
+  scheme?: 'light' | 'dark';
+  /** The colour of the glyphs: dark on a light header, light on a dark one. */
+  tint?: 'dark' | 'light';
+  signal?: number;
+  wifi?: boolean;
+  battery?: number;
+  charging?: boolean;
+}
+
+const {
+  time = '9:41',
+  scheme = 'light',
+  tint = 'dark',
+  signal = 4,
+  wifi = true,
+  battery = 100,
+  charging = false
+} = Astro.props;
+
+// Clamped, because a page that asks for 7 bars or 130 per cent should still draw something
+// iOS could have drawn.
+const bars = Math.max(0, Math.min(4, Math.round(signal)));
+const level = Math.max(0, Math.min(100, battery));
+
+// The four bars, tallest last. These are the SVG's own coordinates, which are unitless and
+// scale with the glyph, so the size on screen comes from the CSS variable below.
+const SIGNAL = [
+  { x: 0, h: 4 },
+  { x: 4.6, h: 6.7 },
+  { x: 9.2, h: 9.3 },
+  { x: 13.8, h: 12 }
+];
+
+// The battery's window is 21 wide inside a 25 wide shell. A sliver is kept at the low end so
+// an almost empty battery still reads as a battery and not as an empty box.
+const fill = level === 0 ? 0 : Math.max(2, Math.round((level / 100) * 21));
+---
+
+<div class="status" data-scheme={scheme} data-tint={tint}>
+  <span class="time">{time}</span>
+  <span class="indicators">
+    <svg class="signal" viewBox="0 0 17 12" aria-hidden="true">
+      {SIGNAL.map((b, i) => (
+        <rect class={i < bars ? 'on' : 'off'} x={b.x} y={12 - b.h} width="3" height={b.h} rx="1" />
+      ))}
+    </svg>
+    {wifi && (
+      <svg class="wifi" viewBox="0 0 16 12" aria-hidden="true">
+        <path class="arc" d="M1.9 4.6a8.6 8.6 0 0 1 12.2 0" />
+        <path class="arc" d="M4.7 7.3a4.7 4.7 0 0 1 6.6 0" />
+        <circle class="dot" cx="8" cy="10" r="1.5" />
+      </svg>
+    )}
+    <svg class="battery" data-charging={String(charging)} viewBox="0 0 27 13" aria-hidden="true">
+      <rect class="shell" x="0.5" y="0.5" width="24" height="12" rx="4" />
+      <path class="cap" d="M25.6 4.3c.9.3 1.4 1 1.4 2.2s-.5 1.9-1.4 2.2V4.3Z" />
+      {fill > 0 && <rect class="fill" x="2" y="2" width={fill} height="9" rx="2.5" />}
+      {charging && <path class="bolt" d="M14.1 2.4 9.3 7.9h2.9l-1.3 3.2 4.8-5.5h-2.9l1.3-3.2Z" />}
+    </svg>
+  </span>
+</div>
+
+<style>
+  .status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-sizing: border-box;
+    width: 100%;
+    /* The safe area above the content on a 393 x 852 phone. */
+    height: var(--db-ios-status-height, 59px);
+    /* The time and the indicators are not inset by the same amount on iOS: the time sits a
+       little further in than the battery does. */
+    padding: 0 var(--db-ios-status-right, 22px) 0 var(--db-ios-status-left, 27px);
+    font-family: var(--db-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+    /* Transparent, because it is drawn over whatever the screen puts behind it. */
+    background: transparent;
+    /* A screen whose background is a full-bleed layer draws that layer as a positioned
+       element, and a positioned element paints over static content however early it comes
+       in the markup. iOS never hides the clock behind a background, so the bar carries its
+       own place in the stack and stays on top of one. */
+    position: relative;
+    z-index: 1;
+  }
+
+  /* The glyphs and the time are one colour, so the SVGs all take currentColor. */
+  .status[data-tint='dark'] { color: var(--db-text, #152233); }
+  .status[data-tint='light'] { color: var(--db-on-primary, #FFFFFF); }
+
+  .time {
+    font-size: var(--db-ios-body, 17px);
+    font-weight: 600;
+    /* iOS tracks the clock in a touch tighter than body text. */
+    letter-spacing: var(--db-ios-status-tracking, -0.2px);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .indicators {
+    display: flex;
+    align-items: center;
+    gap: var(--db-ios-status-gap, 7px);
+  }
+
+  .signal { height: var(--db-ios-glyph-small, 11px); width: auto; }
+  .wifi { height: var(--db-ios-glyph-small, 11px); width: auto; }
+  .battery { height: var(--db-ios-glyph-battery, 13px); width: auto; }
+
+  .on { fill: currentColor; }
+  /* A bar with no signal is dimmed, not hidden, so the glyph keeps its width. */
+  .off { fill: currentColor; opacity: var(--db-ios-glyph-dim, 0.3); }
+
+  .arc {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+  }
+  .dot { fill: currentColor; }
+
+  .shell {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1;
+    opacity: var(--db-ios-battery-shell, 0.4);
+  }
+  .cap { fill: currentColor; opacity: var(--db-ios-battery-shell, 0.4); }
+  .fill { fill: currentColor; }
+  /* Charging turns the fill green, which is how a person reads it without the bolt. */
+  .battery[data-charging='true'] .fill { fill: var(--db-success, #059669); }
+  .bolt { fill: var(--db-on-primary, #FFFFFF); }
+</style>

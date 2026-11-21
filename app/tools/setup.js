@@ -302,6 +302,21 @@ export async function runSetup({ repoRoot, studioRoot, boardFile, name, canCompi
     // for us belongs with its own kind, in the band its folder makes.
     routes: [...routes].filter(route => !route.startsWith(`/${NEXT_ROUTE}/`))
   });
+  // A board with nothing on it.
+  //
+  // A native app has no page this can convert: its screens are Swift, and nothing here turns
+  // Swift into a frame. The board would then open empty, which reads as broken rather than as
+  // new. So it gets one page, written in components, which is both a frame to look at and the
+  // shape of the next one somebody writes.
+  if (!made.length && !drawn.length) {
+    const first = inStudio('pages', '01-screen.astro');
+    if (!fs.existsSync(first)) {
+      fs.mkdirSync(inStudio('pages'), { recursive: true });
+      fs.writeFileSync(first, STARTER);
+      made.push({ id: 'exp:01-screen', from: '', dir: '', file: 'pages/01-screen.astro' });
+    }
+  }
+
   // The warehouse's own two folders, so a reference can be dropped in and a piece written
   // the moment the board opens.
   fs.mkdirSync(inStudio('refs'), { recursive: true });
@@ -909,3 +924,27 @@ function freeName(dir, file) {
 }
 
 const escape = s => String(s).replace(/</g, '&lt;');
+
+// The one page a board starts with when the project has none this could convert. Everything
+// around the screen comes from the kit, so this is the shape of a page and not a copy of the
+// chrome: see `app/astro-kit`.
+const STARTER = `---
+import Screen from '@kit/base/Screen.astro';
+import Stack from '@kit/base/Stack.astro';
+import Text from '@kit/base/Text.astro';
+import IOSNavBar from '@kit/ios/IOSNavBar.astro';
+import IOSHomeIndicator from '@kit/ios/IOSHomeIndicator.astro';
+---
+
+<Screen title="A screen" width={393} height={852}>
+  <IOSNavBar title="A screen" large />
+  <Stack padding="var(--db-screen-x, 24px)" gap={12}>
+    <Text size={17}>This is a page of the board, written in components.</Text>
+    <Text size={15} color="var(--db-text-secondary, #4E6177)">
+      The bars come from the kit, the colours and the sizes from this project's own design
+      system. Change this file and the frame changes as you save it.
+    </Text>
+  </Stack>
+  <IOSHomeIndicator />
+</Screen>
+`;

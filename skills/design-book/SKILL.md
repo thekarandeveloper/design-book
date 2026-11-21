@@ -57,6 +57,31 @@ other rather than against the rest of the board.
    platform, the measurements you need are already written down somewhere: a button's
    height, a card's corner radius, a row's padding. Take them.
 
+## The design system and the moodboard are binding
+
+Steps 2 and 3 are not background reading. Nothing is designed here that is not drawn from
+them, and this holds for every frame, every option and every small fix:
+
+- **Every colour comes from the design system.** A token if the project declares one
+  (`var(--plate-ink)`), otherwise a value the Design system page already shows. A colour
+  you mixed yourself, however good, is wrong here: it is a thirty-third colour in a
+  thirty-two colour palette, and nothing else in the app will ever match it.
+- **Every face, size and weight comes from the design system** in the same way. No font
+  the project does not already load.
+- **Every measurement comes from a component that already exists**: the row height, the
+  radius, the padding, the gap. Open the component and take the number.
+- **Every reference in the moodboard that covers what you are drawing is followed.** Its
+  note is the decision: "row height 44, checkbox left" is an instruction, not a mood. A
+  reference you cannot reconcile with the design system is a question to ask, not a tie
+  to break on your own.
+- **If what is asked for cannot be built from them, say so before building it.** One line
+  naming what is missing, then do the rest. Inventing the missing piece quietly is the
+  one failure that cannot be seen in a screenshot.
+
+Name them when you hand the work back: which tokens, which components, which reference.
+"When the user refers to a reference by name" they mean a file in `.designbook/refs/`:
+clicking a moodboard tile copies that name, so a name in a prompt is a file you can open.
+
 ## It must not look like a machine made it
 
 Unless the ask says otherwise in so many words: no em dashes, no outline or stroke
@@ -110,13 +135,70 @@ can do the job, and say so when you do.
 | The app is | Where its components are | What to do |
 |---|---|---|
 | Astro, Next, Vue, Svelte | `src/components`, `app`, `components` | Import them. A page on the board is a real page of the project. |
-| SwiftUI | `*/Views`, `*/DesignSystem`, `*/Components` | Read the screen and the design system it uses, and draw it in HTML with those numbers. See below. |
-| Compose | `*/ui`, `*/designsystem`, `*/components` | The same: read the dp and the shapes, then draw in HTML. |
+| SwiftUI | `*/Views`, `*/DesignSystem`, `*/Components` | Read the screen and the design system it uses, and write it as an `.astro` page with those numbers. See below. |
+| Compose | `*/ui`, `*/designsystem`, `*/components` | The same: read the dp and the shapes, then write the `.astro` page. |
 
-For a web project, write the page in the project's own language so it compiles with the
-project's own dev server. For a native project the board cannot run Swift or Kotlin, so
-the page is HTML, and its value comes from using the app's **real numbers** rather than
-invented ones. Real numbers make it close. They do not make it a copy.
+**Every page on this board is `.astro`, in every project.** The board carries its own
+server and its own kit, so Astro is the board's language, not the project's: a SwiftUI or
+Compose repo with no Node in it compiles these pages exactly the same way a Next site does,
+and nothing is installed in the project to make that work. There is no HTML route and no
+reason to look for one.
+
+A web project's page can also import the project's own components, because the same server
+builds both. A native project's cannot, since the board runs no Swift or Kotlin, so its
+value comes from the kit plus the app's **real numbers**. Real numbers make it close. They
+do not make it a copy.
+
+Older boards hold `.html` pages with `canvas:` ids. They still render; nothing new is
+written that way, and one being edited is rewritten as `.astro`.
+
+## A page is written in components
+
+A page in `.designbook/pages` is an `.astro` file, compiled by the board itself. Do not write
+a screen as one HTML file with the chrome copied into it: everything the system draws is in
+the kit, and a page that draws its own is the thing this replaced.
+
+```astro
+---
+import Screen from '@kit/base/Screen.astro';
+import Stack from '@kit/base/Stack.astro';
+import Text from '@kit/base/Text.astro';
+import IOSNavBar from '@kit/ios/IOSNavBar.astro';
+import IOSTabBar from '@kit/ios/IOSTabBar.astro';
+---
+<Screen title="Home" width={393} height={852}>
+  <IOSNavBar title="Home" large />
+  <Stack padding="var(--db-screen-x, 24px)" gap={12}>
+    <Text size={17}>Anything the app's own code says is here.</Text>
+  </Stack>
+  <IOSTabBar tabs={[{ icon: 'house.fill', label: 'Home', active: true }, { icon: 'square.stack', label: 'Items' }]} />
+</Screen>
+```
+
+- `@kit/base/...` the document and the shared pieces: Screen, Stack, Row, Text, Card,
+  Divider, Spacer, Icon.
+- `@kit/ios/...` IOSStatusBar, IOSNavBar, IOSTabBar, IOSSheet, IOSGroupedList, IOSListRow,
+  IOSButton, IOSHomeIndicator.
+- `@kit/android/...` AndroidStatusBar, AndroidTopAppBar, AndroidBottomBar, AndroidNavBar,
+  AndroidFAB, AndroidCard, AndroidListItem, AndroidButton.
+- `@board/parts/...` anything this board made for itself.
+
+`Screen` carries the frame: `title`, `width`, `height`, `device`, `grow`, `group`, `source`.
+
+**Never pass `bezel`.** The device round a frame is the board's switch, in its own menu, and
+it is on or off for every frame at once. A page that sets `bezel={false}` reports no band,
+drops out of that switch for good, and sits on the board bare while everything round it
+wears a phone. `Screen` ignores the prop now; do not write it, and delete it from any page
+that still has one. Same for the device itself: `device` says what the page was designed on,
+and the board swaps it per frame from its menu.
+
+A page that grows does scroll inside the glass, because a phone cannot get taller. That is
+the real behaviour and it is not a reason to take the device off: a long screen is scrolled
+in its frame, exactly as it is in the hand.
+A navigation bar draws the status bar above it, so do not add one as well. A bar pins itself
+to the bottom of the screen on its own. Every colour and size is a `--db-*` variable the board
+fills from the project's own design system, so write `var(--db-primary)` and not a hex.
+`app/astro-kit/*/README.md` lists every component and its props.
 
 ## A native screen, built from its code
 
@@ -181,7 +263,7 @@ Most of the ways this goes wrong are the first of those, so it comes first.
 11. **Confirm where the board belongs** before the first file: the project the app is in,
     not the workspace around it.
 12. **Verify on the board, not in the file.** `curl -s $B/studio` lists the frame ids (a page
-    in `.designbook/pages` ends in `.html`) and `curl -s $B/board` the sections. Run
+    in `.designbook/pages` is `exp:<file name without .astro>`) and `curl -s $B/board` the sections. Run
     `POST $B/check` on every frame, not a sample.
 13. **A generator lives in the project,** under `.designbook/`, never in a scratchpad that
     disappears, and its pages are output, not meant to be edited by hand.
@@ -222,7 +304,7 @@ Frame sizes to use, set per file:
 Only when a new page is wanted: a version to compare, or a frame that does not exist in
 the project yet. One file each, in `.designbook/pages/`.
 
-**A web project**, in its own language, so it can import the real thing:
+**A web project**, which can import the real thing:
 
 ```astro
 ---
@@ -234,23 +316,32 @@ import BaseLayout from '/src/layouts/BaseLayout.astro';
 </BaseLayout>
 ```
 
-**A native screen**, as a standalone HTML file with the app's real measurements:
+**A native screen**, the same file shape, built from the kit and the app's real numbers:
 
-```html
-<!doctype html>
-<html><head><meta charset="utf-8"><title>Today, cards</title>
-<meta name="designbook-width" content="393">
-<meta name="designbook-height" content="852">
-<meta name="designbook-group" content="today">
-<style>
-  /* 17px here is DS.Typography.body, which is 17pt on the device. */
-</style>
-</head><body>...</body></html>
+```astro
+---
+import Screen from '@kit/base/Screen.astro';
+import Row from '@kit/base/Row.astro';
+import Text from '@kit/base/Text.astro';
+import IOSStatusBar from '@kit/ios/IOSStatusBar.astro';
+---
+<Screen title="Today, cards" width={393} height={852} group="today"
+        source="Swipe/Presentation/Today/TodayView.swift">
+  <IOSStatusBar time="10:39" />
+  {/* 17 here is DS.Typography.body, which is 17pt on the device. */}
+  <Row padding={16}><Text size={17}>Today</Text></Row>
+</Screen>
 ```
 
-The `designbook:` comment or the `designbook-*` metas set the frame. Versions of one idea share a
-`group` so the board puts them side by side. Write any new CSS inline: a page made here
-is self-contained, so deleting it leaves nothing behind.
+**`Screen` lives in the page file, never only inside a part.** The board reads a frame's
+size by reading the page, and it does not follow an import: with `Screen` behind one, every
+frame was sized to the fallback while the page rendered wider, and the board drew the whole
+set cut off at the side. The page owns `Screen`; a part is what goes inside it.
+
+`Screen`'s props set the frame, and a `designbook:` comment does the same for a page that
+has no `Screen`. Versions of one idea share a `group` so the board puts them side by side.
+Keep any new CSS in the page's own `<style>`: a page made here is self-contained, so
+deleting it leaves nothing behind.
 
 ## Put them in a section of their own
 
@@ -288,15 +379,15 @@ import BaseLayout from '/src/layouts/BaseLayout.astro';
 ---
 ```
 
-Anywhere else, write an HTML file in `.designbook/pages/` with the same two numbers as metas
-(`<meta name="designbook-width" content="1080">`).
+Anywhere else, write the `.astro` page in `.designbook/pages/` and put the same two numbers
+on its `Screen` (`width={1080} height={1920}`), or in its `designbook:` comment.
 
 Design to that size, and keep what you draw inside it. A frame made at a chosen size
 keeps that size and crops whatever does not fit, because it would be cropped wherever it
 was published too. Only a screen grows: a phone, a tablet or a desktop page carries
 `grow=yes` and gets taller as its content does. A post, a thumbnail or a poster does
-not. Its id on the board is `exp:<file name>` for a page of the
-project and `canvas:<file name>` for an HTML one.
+not. Its id on the board is `exp:<file name>`; `canvas:<file name>.html` is an old HTML page
+that has not been rewritten yet.
 
 ## Ask the board instead of working it out
 
@@ -313,6 +404,7 @@ curl -s $B/palette                      # the colours, fonts and spacing it real
 
 curl -s -X POST $B/frame/new    -H 'Content-Type: application/json' -d '{"title":"Story","width":1080,"height":1920}'
 curl -s -X POST $B/frame/rename -H 'Content-Type: application/json' -d '{"page":"pages/03-story.astro","title":"Story, wide"}'
+curl -s -X POST $B/frames/rename -H 'Content-Type: application/json' -d '{"frames":[{"page":"exp:03-story","title":"Story"},{"page":"04-cart.astro","title":"Cart"}]}'
 curl -s -X POST $B/frame/delete -H 'Content-Type: application/json' -d '{"page":"pages/03-story.astro"}'
 curl -s -X POST $B/frame/move   -H 'Content-Type: application/json' -d '{"page":"exp:03-story","section":"Ideas"}'
 curl -s -X POST $B/check        -H 'Content-Type: application/json' -d '{"page":"exp:03-story"}'
@@ -327,6 +419,13 @@ Reading one element of a frame, for when a prompt did not carry what you need:
 and the file and line it was written on; `POST $B/shot {"page":"<id>","i":<index>}` is a
 picture of it (`"mode":"context"` for the frame around it). Pictures are under
 `~/Library/Caches/design-book/`, outside the repo, and are cleared after a day.
+
+`frames/rename` renames a whole board in one call. Each item is `{"page": ..., "title": ...}`,
+and `page` is a frame id, a file name or the title it has now, because those are the three
+things you are likely to be holding. Renaming a frame changes its id, so a list read before
+the first call is wrong by the second: use this rather than a loop of `frame/rename`. The
+answer carries one line per frame, so a run that half worked says which half. The number at
+the front of a file name is kept and never appears in the name shown.
 
 `frame/move` puts one frame somewhere else, in a single call: `section` is the section it
 goes to, by id or by name, and a name nobody has used yet makes that section. Where it
@@ -378,25 +477,23 @@ The last line says who should do it, because the size of the change decides what
 
 Both are in `~/.claude/agents/`, installed with this skill, and hand back two lines.
 
-## The board keeps itself in step with the default branch
+## The board keeps its own history, on the branch you are already on
 
-When a person has turned it on for the repo, the board's own files (the board file, `pages/`,
-`refs/`, `parts/`, `gen/`) are kept on the default branch, whatever branch the checkout is on:
-others' changes are brought in, and yours are committed and pushed a few seconds after you stop.
-So:
+Whatever branch the checkout is on, a change to the board's own files (the board file,
+`pages/`, `refs/`, `parts/`, `gen/`) is committed to that branch, locally, a few seconds
+after you stop. Nothing is fetched, nothing is pushed, no branch is changed, no history is
+rewritten. The commit is made with a pathspec, so anything you have staged elsewhere stays
+staged and is never swept into it. So:
 
-- **Do not run git for the board.** No commit, push, pull, merge or branch for these files. It
-  does it, as one commit on top of origin that holds only them, and never touches the branch
-  you are on, your code or anything unpublished.
-- **Delete a frame through the board:** `POST $B/frame/delete`. That is the only deletion that
-  is shared. A file removed any other way (`rm`) is put back, because the safe reading of a
-  file that vanished is that it was not meant to. Nothing is ever deleted: what is replaced
-  or removed goes to `.designbook/.trash/sync/<time>/` first.
-- **Write `.designbook/.working` while you work** (below). Others' changes still come in, but
-  nothing of yours goes out until you remove it, so nobody gets half a page.
-- **A file you and somebody else both changed** is merged as text where it can be, and
-  otherwise kept as it is with "Choose a version" in the bar. Do not resolve it yourself.
-- `GET $B/sync` says where it stands.
+- **Do not run git for the board.** No commit for these files: it has already made one.
+  Your own code is yours to commit as usual.
+- **Delete a frame through the board:** `POST $B/frame/delete`, and a reference through
+  `POST $B/ref/delete`. Nothing is destroyed: the file goes to `.designbook/.trash/`.
+- `GET $B/history` is the board's commits, newest first.
+  `POST $B/history/revert {"sha":"<commit>"}` puts the board back to how it was at that
+  commit, forwards: the old files are written over the current ones and committed on top,
+  so everything since is still in the history and can be gone back to the same way.
+  The History button in the board's own menu is this, and is the usual way to use it.
 
 ## Say which frame you are working on
 
@@ -477,3 +574,41 @@ lost.
 where it lives. Versions made to compare are separate pages until one is chosen. A
 component, a token, or a page nobody mentioned is not touched on the way past: say what
 else you think should change, and let that be decided.
+
+## What Karan has sent back, and what it means for the next screen
+
+Corrections made on a real job (Sakhi iOS, 2026-11-15, three options for the calendar
+sheet's month header). Each line is a design that was handed over and rejected, so each one
+is a default from now on, not a preference to weigh.
+
+- **Use the platform's own components.** On an iOS screen: the app's design-system controls
+  and the kit's `@kit/ios/*`. Not a web idiom wearing iOS colours. An `x` in a grey disc, a
+  chip, a pill, a badge: these read as web or as Material and they were rejected on sight.
+  A sheet on iOS is dismissed by its grabber or by a chevron pointing down, so draw that.
+- **One row stays one row.** A sheet whose detent is fixed has only the slack its layout
+  already has, and its content does not scroll. A second row does not fit: it pushes the
+  action bar onto the home indicator, or it forces the detent up and the screen behind
+  loses the same points. Both were rejected. Design inside the row that exists.
+- **Compact.** A new control is the width of its own words and no more. Adding height to a
+  screen to fit an idea is the idea failing, not the screen.
+- **Do not shout an affordance.** A tinted pill around a word says "press me" four times
+  over. A colour on the word, or a small chevron after a title, is enough and is what the
+  platform does. The loudest version was rejected in favour of the quietest one that still
+  reads.
+- **Balance the row.** If one end holds a 36 button and the other holds two, make both ends
+  the same width so what is between them is on the middle of the screen. Centre things by
+  laying the sides out at equal widths in flow, not by absolutely positioning an overlay.
+- **A dismiss sits on the left.** Same place, same shape, in every option of a set.
+- **A set of options differs in one thing.** Everything a set shares is kept identical so
+  that the thing being chosen is the only thing that moves. Build that shared part once,
+  as a part, and let each option carry only its own difference.
+
+## Before handing a frame over, look at it
+
+Export it and read the picture. The board's check finds contrast and tap targets; it does
+not find a row that has stacked itself vertically, a control that has wrapped, or a bar
+that has slid under the home indicator. Those were all shipped to Karan at least once in
+one afternoon because a check came back with nothing new and the picture was never opened.
+
+`KNOWN-ISSUES.md` in this repo says which of those silent failures are the tool's own,
+with the workaround for each. Read it when a change does not show up.

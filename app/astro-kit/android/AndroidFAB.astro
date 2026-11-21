@@ -1,0 +1,101 @@
+---
+// Material 3's floating action button, in its three sizes and its extended form.
+//
+// The one thing got wrong without it is the corner. A FAB is not a circle on Material 3:
+// it is a rounded square, 12 at small, 16 at regular, 28 at large, and drawing it as a
+// circle is the single clearest sign a screen was copied from an iOS layout.
+//
+// `position` is `bottom-right` by default, which is absolute, so whatever holds it needs
+// its own `position: relative`. `none` leaves it where it is written in the flow.
+
+import Icon from '../base/Icon.astro';
+
+const {
+  icon = 'add',
+  label = '',
+  size = 'regular',
+  position = 'bottom-right',
+  // How much the app's own bottom bar takes, so the FAB sits above it rather than on it.
+  above = 0,
+  offset = 16
+} = Astro.props;
+
+// An extended FAB is always 56 tall whatever size was asked for, because the label sets the
+// height, and it is the only form with text in it.
+const extended = Boolean(label);
+const iconSize = size === 'large' && !extended ? 36 : 24;
+---
+
+<div
+  class="fab"
+  data-size={size}
+  data-position={position}
+  data-extended={extended ? 'true' : 'false'}
+  style={`--fab-offset: ${Number(offset)}px; --fab-above: ${Number(above)}px`}
+>
+  <Icon name={icon} size={iconSize} color="currentColor" filled={false} />
+  {extended && <span class="label">{label}</span>}
+</div>
+
+<style>
+  .fab {
+    /* 40, 56 and 96 across, with 12, 16 and 28 of radius. Material's own pairs. */
+    --fab-size: var(--db-android-fab, 56px);
+    --fab-radius: var(--db-radius-xl, 16px);
+
+    width: var(--fab-size);
+    height: var(--fab-size);
+    box-sizing: border-box;
+    border-radius: var(--fab-radius);
+    background: var(--db-primary, #2E7BF6);
+    color: var(--db-on-primary, #FFFFFF);
+    font-family: var(--db-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--db-space-2, 8px);
+    /* A FAB is the one surface Material lifts clearly off the page, so it keeps a real
+       shadow even where the rest of the screen is flat. */
+    box-shadow: 0 3px 6px -2px color-mix(in srgb, var(--db-text, #152233) 28%, transparent);
+  }
+
+  .fab[data-size='small'] {
+    --fab-size: var(--db-android-fab-sm, 40px);
+    --fab-radius: var(--db-radius-lg, 12px);
+  }
+
+  .fab[data-size='large'] {
+    --fab-size: var(--db-android-fab-lg, 96px);
+    --fab-radius: var(--db-android-fab-radius, 28px);
+  }
+
+  /* An extended FAB is 56 tall and as wide as its label needs, so the width stops being a
+     size and becomes padding. */
+  .fab[data-extended='true'] {
+    --fab-size: var(--db-android-fab, 56px);
+    --fab-radius: var(--db-radius-xl, 16px);
+    width: auto;
+    min-width: var(--db-android-fab-min, 80px);
+    padding: 0 var(--db-space-4, 16px);
+  }
+
+  .label {
+    font-size: var(--db-android-label, 14px);
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    /* A little more room on the text side than the icon side, which is how Material keeps
+       the label from looking pushed against the edge. */
+    padding-right: var(--db-space-1, 4px);
+  }
+
+  /* Sat over the screen, clear of the app's own bottom bar, which the page itself places. */
+  .fab[data-position='bottom-right'] {
+    position: absolute;
+    right: var(--fab-offset);
+    /* Above the system's bar, and above the app's own bottom bar when the screen says how
+       tall it is. A FAB over the navigation is the commonest fault in a copied screen. */
+    bottom: calc(var(--db-safe-bottom, 0px) + var(--fab-above, 0px) + var(--fab-offset));
+  }
+</style>

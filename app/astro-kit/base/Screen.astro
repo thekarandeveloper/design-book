@@ -1,0 +1,452 @@
+---
+// The whole document a board page is.
+//
+// A page on the board is one screen of a real product, so the document is that screen and
+// nothing else: the body is exactly the frame's size, with no page chrome around it. The
+// board reads the metas below to size the frame it draws this page in, so they are the
+// contract between a page and the canvas. Get them wrong and the frame is the wrong shape,
+// however right the design inside it is.
+
+import '../tokens.css';
+import iphone from '../devices/iphone.png';
+import ipad from '../devices/ipad.png';
+import laptop from '../devices/laptop.png';
+import browserBar from '../devices/browser.png';
+import shots from '../devices/devices.json';
+
+interface Props {
+  title: string;
+  device?: 'iphone' | 'ipad' | 'laptop' | 'android' | 'web';
+  width?: number;
+  height?: number;
+  grow?: boolean;
+  scheme?: 'light' | 'dark';
+  background?: string;
+  group?: string;
+  /** Which of the project's palettes this screen is painted in, for an app that has more
+   *  than one: a cycle phase, a theme. The board publishes every palette it read, and this
+   *  is what picks one, so a screen never writes those colours itself. */
+  palette?: string;
+  /** A comma separated list of project files this screen was built from. */
+  source?: string;
+  /** IGNORED, and kept only so an old page still compiles. The device is the BOARD's
+   *  switch, not a page's: its menu turns it on and off for every frame at once, and the
+   *  board offers that switch only for a frame that drew a band. A page that hard-coded
+   *  `bezel={false}` reported no band, dropped out of the switch for good, and sat on the
+   *  board with no device while everything round it had one. Do not read this prop. */
+  bezel?: boolean;
+  /** The colour of the home indicator's bar: dark on a light screen, light on a dark one. */
+  homeTint?: 'dark' | 'light';
+}
+
+// A device name is only a shorthand for a size, and these are the real point sizes the
+// products are designed at. A caller who needs another size passes width and height.
+const SIZES = {
+  ...Object.fromEntries(
+    Object.entries(shots).filter(([, v]) => v && v.size).map(([k, v]) => [k, { width: v.size[0], height: v.size[1] }])
+  ),
+  android: { width: 360, height: 800 },
+  web: { width: 1440, height: 900 }
+};
+
+const {
+  title,
+  device: deviceProp = 'iphone',
+  width,
+  height,
+  grow = false,
+  scheme = 'light',
+  background = 'var(--db-background, #F2F2F7)',
+  group,
+  palette,
+  source,
+  bezel,
+  homeTint = 'dark'
+} = Astro.props;
+
+// The board can ask for this page on another device, per frame, without the page being
+// edited: a frame's own choice adds `?device=iphone` to the address it is served at. The
+// page's own prop is what it falls back to, so a page is still written for the device it
+// was designed on. `none` is the screen on its own.
+const KINDS = ['iphone', 'ipad', 'laptop', 'android', 'web', 'none'];
+const askedDevice = Astro.url.searchParams.get('device');
+const swapped = askedDevice && KINDS.includes(askedDevice);
+const device = !swapped ? deviceProp : (askedDevice === 'none' ? 'web' : askedDevice);
+
+// A page asked for on another device is that device's size, not the size the page was
+// written at: an iPhone frame carrying `width={393}` shown on a laptop has to be 1440
+// wide or it is a phone page on a big screen rather than the page on a laptop.
+const size = SIZES[device] ?? SIZES.iphone;
+const w = Number(swapped ? size.width : (width ?? size.width));
+const h = Number(swapped ? size.height : (height ?? size.height));
+
+// A screen that grows is as tall as its content and never shorter than the frame. One that
+// does not grow is exactly the frame, so whatever runs past the edge is cropped the way it
+// would be cropped on the device.
+
+// What the system keeps for itself at the top and the bottom of this device, as variables.
+//
+// The bars pin themselves to these rather than to numbers of their own, which is the only
+// way a tab bar and the system's own bar underneath it can know where each other are
+// without being written as one component. A screen is also a positioned box, so a bar that
+// pins itself lands on the screen and not on whatever happens to be around it.
+const SAFE = {
+  ...Object.fromEntries(
+    Object.entries(shots).filter(([, v]) => v && v.safe).map(([k, v]) => [k, { top: v.safe[0], bottom: v.safe[1] }])
+  ),
+  android: { top: 24, bottom: 24 },
+  web: { top: 0, bottom: 0 }
+};
+const safe = SAFE[device] || SAFE.iphone;
+
+// The device around the screen.
+//
+// A frame without one is a rectangle of pixels, and a rectangle of pixels does not say how
+// much room the thing really has: the corners cut, the island sits over the top of the
+// page, and the bar at the bottom is somebody's thumb's worth of space. Drawn, they are
+// all three on the board where they can be looked at.
+//
+// It is drawn rather than photographed on purpose. A photograph of a phone is one lighting
+// and one angle, it weighs megabytes, and it cannot be measured. These are Apple's own
+// numbers: the display's corner radius, the band around it, and the island's size and
+// where it sits.
+// It is a photograph of the real thing, not a drawing of one.
+//
+// Each of these is one PNG with the screen cut out of it, so the page shows through the
+// hole and the band, the corners, the island and the camera are the device's own rather
+// than a guess at them. The numbers are measured off each image rather than typed: `image`
+// is its size in pixels and `screen` is where the hole is in it, also in pixels. Everything
+// else follows from those two, so another photograph is four different numbers and nothing
+// else changes.
+//
+// `over` says which side of the page the photograph goes. Over, for one with the screen cut
+// out: the band then really does round the page's corners and the island really does sit on
+// top of it. Under, for one whose screen is filled in, where over would hide the page.
+// `web` is the laptop photograph: a web page is shown on the machine it is read on, and
+// it was the one kind of frame on this board with nothing round it.
+const SRC = { iphone: iphone.src, ipad: ipad.src, laptop: laptop.src, web: laptop.src };
+const DEVICE = {
+  ...Object.fromEntries(
+    Object.entries(shots).filter(([k]) => SRC[k]).map(([k, d]) => [k, { ...d, src: SRC[k] }])
+  ),
+  // Android has no photograph yet, so it keeps the drawn band.
+  android: { band: 11, radius: 36, punch: { d: 24, top: 10 }, chassis: '#1C1C1E' }
+};
+// The board can ask for this page without its device, per frame, without the page being
+// edited: a frame's own switch adds `?bezel=0` to the address it is served at. The page's
+// own prop is what it falls back to.
+// The board can also ask for this page on another device, per frame, without the page
+// being edited: a frame's own choice adds `?device=iphone` to the address it is served
+// at. The page's own prop is what it falls back to, so a page is still written for the
+// device it was designed on.
+const asked = askedDevice === 'none' ? '0' : Astro.url.searchParams.get('bezel');
+// The board asks, through the address it serves the page at. Nothing else decides: the
+// page's own `bezel` prop is deliberately not read here, so the board's switch is the one
+// place the device is turned on and off. Every device wears its own by default; web was
+// the exception only because it had none.
+const wants = asked === '0' || asked === 'false' ? false
+  : asked === '1' || asked === 'true' ? true
+  : true;
+const frame = wants ? DEVICE[device] : null;
+const shot = frame && frame.src ? frame : null;
+
+// What the photograph's pixels are worth in points, from the one thing known in both: the
+// screen. A 683 pixel hole showing a 393 point screen is 0.575 points a pixel.
+const scale = shot ? w / shot.screen[2] : 0;
+
+// The board reads the frame's size from these, so they are the OUTSIDE of the device. What
+// the page measures itself against stays the screen, which is what `--db-screen-w` is.
+const outerW = frame ? Math.round(shot ? shot.image[0] * scale : w + frame.band * 2) : w;
+const outerH = frame ? Math.round(shot ? shot.image[1] * scale : h + frame.band * 2) : h;
+// Where the screen sits inside the photograph, in points.
+const atX = frame ? Math.round(shot ? shot.screen[0] * scale : frame.band) : 0;
+const atY = frame ? Math.round(shot ? shot.screen[1] * scale : frame.band) : 0;
+// What a frame loses on each side when the device is switched off.
+const band = atX;
+
+// A device is a window, not a sheet of paper.
+//
+// A page taller than the screen inside a photograph of a phone cannot make the phone
+// taller: that would stretch the picture. It does what it does on the real thing instead,
+// which is scroll inside the glass. So with a device the screen is exactly its own size
+// and scrolls; without one, a growing page is as tall as what is in it.
+const scrolls = !!(frame && grow);
+const box = scrolls
+  ? `width:${w}px;height:${h}px`
+  : (grow ? `width:${w}px;min-height:${h}px` : `width:${w}px;height:${h}px`);
+const corner = frame ? Math.round(shot ? shot.radius * scale : frame.radius) : 0;
+
+// The browser, on a web page inside its laptop.
+//
+// A website is not read on a bare screen, it is read in a browser, and a page drawn
+// edge to edge inside a MacBook is a screenshot of a kiosk. This is a real Chrome's
+// top strip, 2940 by 180 at two times, laid across the top of the screen and not
+// scrolling with the page, the way the real one does not.
+const BROWSER = { w: 2940, h: 180 };
+const chrome = device === 'web' && frame ? Math.round(BROWSER.h * (w / BROWSER.w)) : 0;
+// What is left for the page once the browser has its strip.
+const pageH = h - chrome;
+---
+
+<!doctype html>
+<html lang="en" data-scheme={scheme} data-phase={palette}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content={`width=${w}, initial-scale=1`} />
+    <title>{title}</title>
+    <meta name="designbook-width" content={String(outerW)} />
+    <meta name="designbook-height" content={String(outerH)} />
+    {grow && <meta name="designbook-grow" content="yes" />}
+    {group && <meta name="designbook-group" content={group} />}
+    {source && <meta name="designbook-source" content={source} />}
+  </head>
+  <body
+    data-bezel={frame ? 'true' : undefined}
+    style={`--db-band:${band}px;--db-screen-radius:${corner}px;--db-chassis:${frame && frame.chassis ? frame.chassis : 'transparent'};${frame ? `width:${outerW}px;${grow ? `min-height:${outerH}px` : `height:${outerH}px`};` : ''}--db-safe-top:${safe.top}px;--db-safe-bottom:${safe.bottom}px;--db-screen-w:${w}px;--db-screen-h:${h}px`}
+  >
+    {frame ? (
+      <>
+        {shot && !shot.over && <img class="db-shot" src={shot.src} alt="" aria-hidden="true" />}
+        <div
+          class="db-screen"
+          data-scrolls={scrolls && !chrome ? 'true' : undefined}
+          style={`${box};background:${background};position:absolute;left:${atX}px;top:${atY}px`}
+        >
+          {/* The browser's strip, and the page in its own viewport under it.
+              The strip is not inside the scrolling box: a page's own sticky header
+              computes its top against whatever scrolls, so with the strip in there the
+              site's header stuck to the top of the screen and sat over the browser's
+              tabs. The viewport below the strip is the scrolling box, so the page begins
+              under the chrome and anything it pins to the top pins under it too, the way
+              it does in a real window. */}
+          {chrome ? (
+            <>
+              <img class="db-chrome" src={browserBar.src} alt="" aria-hidden="true" style={`height:${chrome}px`} />
+              <div
+                class="db-view"
+                data-scrolls={scrolls ? 'true' : undefined}
+                style={`height:${pageH}px;background:${background}`}
+              >
+                {scrolls ? <div class="db-roll" style={`min-height:${pageH}px`}><slot /></div> : <slot />}
+              </div>
+            </>
+          ) : (
+            <>
+              {scrolls ? <div class="db-roll" style={`min-height:${h}px`}><slot /></div> : <slot />}
+              {device === 'iphone' && <span class="db-home" data-tint={homeTint}><span></span></span>}
+            </>
+          )}
+        </div>
+        {shot && shot.over && <img class="db-shot" data-over src={shot.src} alt="" aria-hidden="true" />}
+        {frame.punch && (
+          <span
+            class="db-punch"
+            style={`width:${frame.punch.d}px;height:${frame.punch.d}px;top:${atY + frame.punch.top}px`}
+          ></span>
+        )}
+      </>
+    ) : (
+      <div class="db-screen" style={`${box};background:${background}`}><slot /></div>
+    )}
+  </body>
+</html>
+
+<!-- These rules are global on purpose. They are about the document itself and about
+     everything a page drops into the slot, and a scoped style reaches neither. -->
+<style is:global>
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  /* ── The device ────────────────────────────────────────────────────────── */
+
+  /* The screen itself. Without a device around it this is the whole page, and the radius
+     is 0, so a page that asks for no bezel is exactly what it was before. */
+  .db-screen {
+    position: relative;
+    z-index: 1;
+    overflow: hidden;
+    border-radius: var(--db-screen-radius, 0);
+    /* The same reason as `.db-roll`: a first child's top margin must stay inside. */
+    display: flow-root;
+  }
+
+  /* The frame is the device, and the page is placed inside it at the measured spot. The
+     body itself draws nothing: the photograph is the device. */
+  body[data-bezel] {
+    position: relative;
+    background: var(--db-chassis, transparent);
+  }
+
+  /* The bar at the bottom.
+     It is not the 5 tall bar: it is the 34 tall area the bar sits in, and that area is why
+     a screen's last row never touches the bottom of the phone. Every iPhone screen has one,
+     so the device draws it rather than every page remembering to. */
+  .db-home {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 4;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    height: var(--db-ios-home-height, 34px);
+    padding-bottom: var(--db-ios-home-bottom, 8px);
+    pointer-events: none;
+  }
+
+  .db-home > span {
+    width: var(--db-ios-home-width, 140px);
+    height: var(--db-ios-home-bar, 5px);
+    border-radius: var(--db-radius-full, 999px);
+  }
+
+  .db-home[data-tint='dark'] > span { background: var(--db-text, #000000); }
+  .db-home[data-tint='light'] > span { background: var(--db-on-primary, #FFFFFF); }
+
+  /* The photograph of the device. It covers the whole frame, and because the screen is cut
+     out of it the page shows through the hole: the corners, the band, the island and the
+     camera are the real thing's rather than a drawing of them. It never takes a pointer,
+     so a click goes to the page under it. */
+  /* Over the page or under it, as the photograph says.
+     A phone's photograph has its screen cut out and belongs on top, so its band really
+     rounds the page and its island really sits over it. A laptop's has its screen filled
+     in and belongs underneath. This was 5 for both, so the laptop's own black screen was
+     painted over the page: the only thing that showed through was a sticky header, which
+     makes a stacking context of its own. */
+  .db-shot {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 0;
+    pointer-events: none;
+    user-select: none;
+  }
+  .db-shot[data-over] { z-index: 5; }
+
+  /* The browser's own strip, across the top of the screen.
+     Sticky, because a browser's chrome stays where it is while the page scrolls under
+     it. Giving it a fixed height instead and shortening the page below it would be a
+     page that cannot scroll at all: the screen is what scrolls, and a child with a
+     fixed height has nothing to scroll past. */
+  .db-chrome {
+    display: block;
+    width: 100%;
+    user-select: none;
+    pointer-events: none;
+  }
+
+  /* The window the page is actually drawn in, under the browser's own strip. */
+  .db-view {
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Android's camera, which is a hole rather than an island. */
+  .db-punch {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: var(--db-cutout, #000000);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* The buttons on the sides. They are drawn ON the band rather than proud of it, as a
+     lighter strip: a frame has to measure exactly what the board says it is, and three
+     pixels of button either side would make every frame three pixels wider than its own
+     number. The action button is the short one. */
+  .db-btn {
+    position: absolute;
+    width: 2px;
+    border-radius: 1px;
+    background: rgba(255, 255, 255, 0.22);
+    pointer-events: none;
+  }
+
+  .db-btn-action { left: 1px; height: 32px; }
+  .db-btn-up { left: 1px; height: 64px; }
+  .db-btn-down { left: 1px; height: 64px; }
+  .db-btn-power { right: 1px; height: 102px; }
+
+  /* A page under a photograph has to clip to the hole's own corners, or a background
+     colour shows in them where the real glass curves away. */
+  body[data-bezel] .db-screen { border-radius: var(--db-screen-radius, 0); }
+
+  /* A page longer than the glass scrolls behind it, the way it does on the phone. No
+     scrollbar: there is none on a phone either, and one would sit on top of the band. */
+  .db-screen[data-scrolls],
+  .db-view[data-scrolls] {
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .db-screen[data-scrolls]::-webkit-scrollbar,
+  .db-view[data-scrolls]::-webkit-scrollbar { width: 0; height: 0; }
+
+  /* The content inside the glass, which is as long as it is. Anything the page pinned to
+     the screen's edges is pinned to this, so a bar stays where the page put it.
+     `flow-root` because of margin collapsing: a sheet's top margin is how far down the
+     screen it starts, and without this that margin escaped its parent and pushed the whole
+     roll down instead. Everything inside then sat the sheet's own offset too low, which
+     showed as a strip of the page's colour above the dimmed screen. */
+  .db-roll {
+    position: relative;
+    display: flow-root;
+  }
+
+  /* The bar at the bottom belongs to the glass, not to the page rolling behind it. */
+  .db-screen[data-scrolls] > .db-home { position: sticky; bottom: 0; margin-top: -34px; }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* `:where()`, so this weighs nothing.
+     These are the kit's defaults for a page that says nothing, not decisions. A project
+     that reads its own type and text colour out of its stylesheet writes them on `body`
+     too, and with both rules at the same weight it was the order they happened to land in
+     the bundle that won: the same Plate page came out in Plus Jakarta Sans one run and in
+     the kit's system face the next, with no edit in between, and a web page quietly drawn
+     in the wrong face looks finished. Zero specificity means the project's own rule always
+     wins, without it having to know this rule exists. */
+  /* The frame's own geometry, which is not a project's to override: a margin here would
+     push the screen off the device. */
+  body {
+    margin: 0;
+    overflow-x: hidden;
+  }
+
+  :where(body) {
+    font-family: var(--db-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+    color: var(--db-text, #152233);
+    /* Phones and Macs render type this way, so without it the screenshot looks heavier
+       than the real screen. */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* A frame is a picture of a screen, and no phone paints a scrollbar over its own screen.
+     The page still scrolls, the bar is only not drawn. This has to cover every scrolling
+     element a page makes, which is why it is global and why it is on `*`. */
+  *,
+  html,
+  body {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+</style>

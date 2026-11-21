@@ -1,0 +1,64 @@
+---
+// A Material 3 card, in its three kinds. Whatever is put in it is the page's own content.
+//
+// The one thing got wrong without it is that Material has three cards and they are not the
+// same card with different shadows. Elevated is the surface with a small shadow, filled is
+// the quieter surface with no shadow at all, and outlined is a hairline and nothing else.
+// Giving a filled card a shadow, or an outlined card both a border and a shadow, is the
+// mistake this exists to stop.
+//
+// Default slot: the card's content.
+
+const {
+  variant = 'elevated',
+  padding = 16,
+  radius = 12,
+  width = '',
+  scheme = 'light'
+} = Astro.props;
+
+// Numbers become lengths here so a page can pass 16 and not '16px'.
+const asLength = v => (typeof v === 'number' ? `${v}px` : String(v));
+
+const style = [
+  `--card-pad: ${asLength(padding)}`,
+  `--card-radius: ${asLength(radius)}`,
+  width ? `--card-width: ${asLength(width)}` : ''
+].filter(Boolean).join('; ');
+---
+
+<div class="card" data-scheme={scheme} data-variant={variant} style={style}>
+  <slot />
+</div>
+
+<style>
+  .card {
+    /* The props set these, and the tokens behind them are the fallback when they do not. */
+    --card-pad: var(--db-space-4, 16px);
+    --card-radius: var(--db-radius-lg, 12px);
+    --card-width: auto;
+
+    width: var(--card-width);
+    box-sizing: border-box;
+    padding: var(--card-pad);
+    border-radius: var(--card-radius);
+    background: var(--db-surface, #FFFFFF);
+    color: var(--db-text, #152233);
+    font-family: var(--db-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+    /* No border by default, so the outlined card is the only one that pays for one and the
+       three kinds never stack their treatments. */
+    border: 0 solid transparent;
+  }
+
+  .card[data-variant='elevated'] {
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--db-text, #152233) 14%, transparent);
+  }
+
+  .card[data-variant='filled'] {
+    background: var(--db-surface-raised, #F7FAFD);
+  }
+
+  .card[data-variant='outlined'] {
+    border: 1px solid var(--db-border, #D8E3EF);
+  }
+</style>

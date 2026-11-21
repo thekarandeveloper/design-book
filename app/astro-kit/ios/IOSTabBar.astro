@@ -1,0 +1,162 @@
+---
+// The tab bar iOS draws at the bottom of a screen.
+//
+// TWO STYLES AND WHY: on iOS 26 and later a native tab bar is a floating glass capsule a
+// little above the bottom edge. On earlier iOS it is a full width bar on the bottom edge.
+// Which one a screen should show depends on the OS the app is run on, not on anything in the
+// app's code, so the caller chooses. The default is the current look.
+//
+// WHERE THE CAPSULE NUMBERS COME FROM: they were measured off one screenshot of a real
+// iPhone at 393 x 852, not read out of any code or document, so they may be a little off.
+// Two tabs make a capsule about 188 wide and 58 tall, centred, about 25 above the bottom
+// edge, and each further tab adds about 94. Nobody should treat them as exact.
+//
+// The bar is positioned over the content, because that is what it is: a floating bar and an
+// opaque bottom bar both sit on top of a screen that scrolls under them. So the screen it is
+// placed in has to be a positioned box, which the kit's Screen is.
+
+import Icon from '../base/Icon.astro';
+
+interface Tab {
+  icon: string;
+  label?: string;
+  active?: boolean;
+}
+
+interface Props {
+  tabs?: Tab[];
+  style?: 'floating' | 'classic';
+  scheme?: 'light' | 'dark';
+}
+
+const { tabs = [], style: shape = 'floating', scheme = 'light' } = Astro.props;
+
+// 94 a tab is what makes two tabs 188 wide, which is the width that was measured.
+const per = 94;
+const width = Math.max(1, tabs.length) * per;
+
+const ACTIVE = 'var(--db-primary, #2E7BF6)';
+const QUIET = 'var(--db-text-muted, #94A6BA)';
+---
+
+<nav
+  class="tabs"
+  data-shape={shape}
+  data-scheme={scheme}
+  style={`--db-ios-tabs-width: ${width}px; --db-ios-tab-width: ${per}px;`}
+>
+  <div class="bar">
+    {tabs.map(tab => (
+      <div class="tab" data-active={String(!!tab.active)}>
+        <Icon
+          name={tab.icon}
+          size={shape === 'floating' ? 24 : 26}
+          color={tab.active ? ACTIVE : QUIET}
+          filled={!!tab.active}
+        />
+        {tab.label && <span class="label">{tab.label}</span>}
+      </div>
+    ))}
+  </div>
+  {/* The classic bar keeps the home indicator's area under it, so the tabs are not sitting
+      on the bottom edge of the glass. The page draws the indicator itself. */}
+  {shape === 'classic' && <div class="indicator-area"></div>}
+</nav>
+
+<style>
+  .tabs {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    font-family: var(--db-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  }
+
+  .bar { display: flex; }
+
+  .tab {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    /* A tab is a touch target before it is a picture. */
+    min-height: var(--db-touch, 44px);
+    gap: var(--db-ios-tab-gap, 2px);
+    color: var(--db-text-muted, #94A6BA);
+  }
+  .tab[data-active='true'] { color: var(--db-primary, #2E7BF6); }
+
+  .label {
+    position: relative;
+    z-index: 1;
+    /* A tab label is 10 on iOS and nowhere else in the type scale. */
+    font-size: var(--db-ios-tab-label, 10px);
+    font-weight: 500;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  /* The icon has to sit above the selected tab's capsule, which is drawn as a ::before.
+     The icon is another component's element, so a scoped rule cannot reach it: this one is
+     global on purpose, and narrowed to an svg inside a tab of this bar. */
+  .tab :global(svg) { position: relative; z-index: 1; }
+
+  /* The floating capsule, iOS 26 and later. */
+  .tabs[data-shape='floating'] {
+    display: flex;
+    justify-content: center;
+    padding-bottom: var(--db-ios-tabs-float-bottom, 25px);
+    /* It must not eat taps or layout across the whole width: only the capsule is the bar. */
+    pointer-events: none;
+  }
+  .tabs[data-shape='floating'] .bar {
+    /* Five tabs at 94 each is 470, which is wider than a 393 phone, so the capsule hung off
+       both edges and the first and last label were cut in half. A real bar never does that:
+       past four tabs iOS narrows the tabs, it does not widen the glass. */
+    width: min(
+      var(--db-ios-tabs-width, 188px),
+      calc(var(--db-screen-w, 393px) - var(--db-ios-tabs-float-inset, 32px))
+    );
+    height: var(--db-ios-tabs-float-height, 58px);
+    border-radius: var(--db-radius-full, 999px);
+    /* Glass: the surface colour, part way see through, with what is behind it blurred. */
+    background: color-mix(in srgb, var(--db-surface, #FFFFFF) 72%, transparent);
+    backdrop-filter: blur(var(--db-ios-glass-blur, 24px)) saturate(1.6);
+    box-shadow: var(--db-ios-tabs-float-shadow, 0 4px 20px rgba(0, 0, 0, 0.12));
+    border: var(--db-hairline, 0.5px) solid color-mix(in srgb, var(--db-border, #D8E3EF) 60%, transparent);
+    pointer-events: auto;
+  }
+  .tabs[data-shape='floating'] .tab {
+    /* The measured width is what a tab wants; it gives way when the capsule is capped. */
+    flex: 1 1 var(--db-ios-tab-width, 94px);
+    min-width: 0;
+    height: 100%;
+  }
+  /* The lighter capsule the selected tab sits in. It is inset from the glass so the glass
+     still shows around it. */
+  .tabs[data-shape='floating'] .tab[data-active='true']::before {
+    content: '';
+    position: absolute;
+    inset: var(--db-ios-tab-pill-inset, 5px) var(--db-ios-tab-pill-inset-x, 6px);
+    border-radius: var(--db-radius-full, 999px);
+    background: color-mix(in srgb, var(--db-surface, #FFFFFF) 85%, transparent);
+    z-index: 0;
+  }
+
+  /* The full width bar, iOS 18 and earlier. */
+  .tabs[data-shape='classic'] {
+    background: color-mix(in srgb, var(--db-surface, #FFFFFF) 92%, transparent);
+    backdrop-filter: blur(var(--db-ios-glass-blur, 24px));
+  }
+  .tabs[data-shape='classic'] .bar {
+    height: var(--db-ios-tabs-classic-height, 49px);
+    /* The hairline on top, the same half pixel line as the nav bar's. */
+    box-shadow: inset 0 var(--db-hairline, 0.5px) 0 var(--db-border, #D8E3EF);
+  }
+  .tabs[data-shape='classic'] .tab { flex: 1 1 0; height: 100%; }
+  .tabs[data-shape='classic'] .indicator-area {
+    height: var(--db-ios-home-height, 34px);
+  }
+</style>

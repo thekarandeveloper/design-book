@@ -6,6 +6,7 @@
 // reads and writes, in the repo it is already working in.
 
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import { LiveSource, discoverRoutes, routeTitle, routeSource, resolveRoutes } from './live.js';
@@ -27,8 +28,9 @@ import {
   shotElement, shotRect, shotStates, shotSizes, shotAgain, sheetOf, auditElement, keepPicture, locate
 } from './inspect.js';
 import { snapshot as gitSnapshot, since as gitSince, restore as gitRestore } from './remember.js';
-import { readNativeTokens } from './native.js';
-import { createSync } from './sync.js';
+import { readNativeTokens, tokenCss, readFontFiles, fontCss } from './native.js';
+import { createHistory } from './history.js';
+import { AstroSource, ASTRO_ROUTE, astroMeta as astroPageMeta } from './astro.js';
 import { isScreenSize } from '../src/studio/frames.js';
 
 const JSONH = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' };
@@ -69,7 +71,10 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
   // live on the board, running its own framework, rather than redrawn here.
   let live = null;
   let servePort = 0;  // what this canvas server ended up listening on
-  let sync = null;    // keeps the board's files on the default branch (sync.js)
+  let history = null; // commits the board's files to the branch you are on (history.js)
+  // The board's own Astro: what compiles a page written in components (astro.js). It belongs
+  // to the board and not to the project, so it is the same in a native repo as in a web one.
+  const astro = new AstroSource({ studioRoot, appDir: path.resolve(fileURLToPath(new URL('..', import.meta.url))), log: line => console.log(line) });
   const readyCache = new Map(); // url -> the last answer, for a few seconds
 
   // Is this page really being served, rather than an error page about the server?
@@ -189,49 +194,35 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
 
   // An experiment written as a real page of the project: it can import the project's
   // components and styles, and the project's own dev server compiles it.
-  function experimentPages() {
-    const cfg = liveConfig();
-    if (!cfg || !live || !live.url) return [];
-    const state = experimentState(cfg.cwd);
-    if (!state.enabled) return [];
+  // A page written in components, compiled by the board's own Astro and served from the
+  // board's own address. Its id keeps the `exp:` it has always had, so a board written before
+  // this still points at the same frames.
+  function astroPages() {
     return list(dir('pages'), /\.astro$/).map(file => {
       const id = file.replace(/\.astro$/, '');
-      const meta = astroMeta(dir('pages', file));
+      const meta = astroPageMeta(dir('pages', file));
       return {
         id: 'exp:' + id,
-        kind: 'live',
+        kind: 'astro',
         source: 'canvas',
         file: `pages/${file}`,
         sourceFile: `pages/${file}`,
-        url: `${live.url}${state.route}${id}/`,
+        url: astro.urlFor(`pages/${file}`),
         title: meta.title || id.replace(/[-_]/g, ' '),
-        frame: { width: Number(meta.width) || cfg.frame.width, height: Number(meta.height) || cfg.frame.height },
+        frame: { width: Number(meta.width) || 393, height: Number(meta.height) || 852 },
+        // How much of that frame is the device, so a frame can be shown without it.
+        band: Number(meta.band) || 0,
+        // The screen inside the device, in points.
+        screen: { width: Number(meta.screenW) || 0, height: Number(meta.screenH) || 0 },
+        // Longer than the glass, so it scrolls inside the device rather than growing the
+        // frame. The board hands such a frame its own wheel.
+        rolls: meta.rolls === 'yes',
+        // A screen grows with what is in it unless it was made at a size somebody chose.
         sized: !!meta.height && meta.grow !== 'yes',
-        group: meta.group || 'Experiments'
+        group: meta.group || '',
+        sources: meta.source ? meta.source.split(',').map(f => f.trim()).filter(Boolean) : []
       };
     });
-  }
-
-  // An .astro experiment states its frame in a comment, because it has no <head> of its
-  // own when it uses the project's layout.
-  //   <!-- designbook: title=Hero, wide type | width=1440 | height=900 | group=hero -->
-  function astroMeta(file) {
-    let head = '';
-    try {
-      const fd = fs.openSync(file, 'r');
-      const buf = Buffer.alloc(2048);
-      const n = fs.readSync(fd, buf, 0, 2048, 0);
-      fs.closeSync(fd);
-      head = buf.subarray(0, n).toString('utf8');
-    } catch (_) { return {}; }
-    const line = head.match(/(?:designbook|design|canvas):\s*([^\n>-]+)/);
-    if (!line) return {};
-    const meta = {};
-    for (const part of line[1].split('|')) {
-      const [k, ...rest] = part.split('=');
-      if (rest.length) meta[k.trim().toLowerCase()] = rest.join('=').trim();
-    }
-    return meta;
   }
 
   function livePages() {
@@ -281,6 +272,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
     for (const file of list(dir('pages'), /\.html$/)) {
       const id = file.replace(/\.html$/, '');
       const meta = htmlMeta(dir('pages', file));
+      if (meta.stub) continue;
       out.push({
         id: 'canvas:' + file,
         kind: 'html',
@@ -300,7 +292,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
       });
     }
     out.push(...livePages());
-    out.push(...experimentPages());
+    out.push(...astroPages());
 
     // The absolute path of whatever a frame is: copied, it has to work in a terminal, in
     // another editor, in a message to somebody else.
@@ -334,7 +326,17 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
       const saved = positions[page.id];
       if (!saved) continue;
       if (typeof saved.x === 'number') { page.x = saved.x; page.y = saved.y; }
-      if (typeof saved.width === 'number' || typeof saved.height === 'number') {
+      // A frame with a device round it is the size of the device, and nothing else.
+      //
+      // A size saved for one is always from before: either the screen's own size, from a
+      // board written before the device was drawn, or an earlier device's. Honour it and
+      // the frame is smaller than the page, so the band and everything on the right of it
+      // is cut off, which is what Karan was looking at. There is also nothing to honour:
+      // a photograph of a phone cannot be some other width and still have the page fit the
+      // hole in it, so the width is not a choice anybody makes. The height is the device's
+      // too, because a page longer than the screen scrolls behind the glass rather than
+      // making the phone taller. A frame with no device keeps whatever was saved for it.
+      if (!page.band && (typeof saved.width === 'number' || typeof saved.height === 'number')) {
         page.frame = {
           width: saved.width || page.frame.width,
           height: saved.height || page.frame.height
@@ -345,9 +347,56 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
       // Unless it is set to fit what is in it, and then the height on the board is the
       // last measurement rather than a decision, and it is taken again.
       if (saved.fit) { page.fit = true; page.sized = false; }
+      // A frame shown on another device than the one its page was written for.
+      //
+      // The page is asked for on that device and the frame takes that device's size, so
+      // a website on an iPhone really is the website at a phone's viewport rather than a
+      // wide page squeezed into a narrow box. Nothing in the page is edited: this is the
+      // same kind of switch as the bezel, kept in the board file beside it.
+      if (saved.device && SHOT_SIZES[saved.device]) {
+        const want = SHOT_SIZES[saved.device];
+        page.device = saved.device;
+        page.frame = { width: want.frame[0], height: want.frame[1] };
+        page.band = want.band;
+        page.url = page.url + (page.url.includes('?') ? '&' : '?') + 'device=' + saved.device;
+        if (saved.device === 'none') { page.bezel = false; page.band = 0; }
+        continue;
+      }
+      // The device drawn round a frame is part of the frame, so turning it off makes the
+      // frame smaller by the band on each side and asks for the page without it.
+      if (saved.bezel === false && page.band) {
+        page.bezel = false;
+        page.frame = {
+          width: page.frame.width - page.band * 2,
+          height: page.frame.height - page.band * 2
+        };
+        page.url = page.url + (page.url.includes('?') ? '&' : '?') + 'bezel=0';
+      }
     }
     return out.sort((a, b) => a.title.localeCompare(b.title));
   }
+
+  // What each device comes to on the board: the whole photograph, and how much of it is
+  // band on the left. Worked out from `devices.json`, the same file `Screen.astro` reads,
+  // so the frame the board lays out can never be a different size from what was drawn.
+  const SHOT_SIZES = (() => {
+    let shots = {};
+    try {
+      shots = JSON.parse(fs.readFileSync(
+        path.join(appRoot, 'astro-kit', 'devices', 'devices.json'), 'utf8'));
+    } catch (_) { return {}; }
+    const out = { none: { frame: [1440, 900], band: 0 } };
+    for (const [name, d] of Object.entries(shots)) {
+      if (!d || !d.size || !d.image || !d.screen) continue;
+      const scale = d.size[0] / d.screen[2];
+      out[name] = {
+        frame: [Math.round(d.image[0] * scale), Math.round(d.image[1] * scale)],
+        band: Math.round(d.screen[0] * scale)
+      };
+    }
+    out.android = { frame: [382, 822], band: 11 };
+    return out;
+  })();
 
   function htmlMeta(file) {
     let head = '';
@@ -364,7 +413,31 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
     while ((m = re.exec(head))) meta[m[1].toLowerCase()] = m[2];
     const title = head.match(/<title>([^<]*)<\/title>/i);
     if (title && !meta.title) meta.title = title[1].trim();
+    meta.stub = isStub(file, head);
     return meta;
+  }
+
+  // An unfilled convert stub.
+  //
+  // The convert pass writes one small file per component it found, each an empty
+  // `<div id="root">` waiting to be drawn into. Nobody asked for them as frames, and a
+  // board that lists them puts eighty blank 1440 by 900 rectangles between the real
+  // screens: at any zoom where you can see the board, those white sheets are most of it.
+  // A stub is not a page until something is drawn in it, so it is not listed until then.
+  function isStub(file, head) {
+    if (!/design-from:/.test(head)) return false;
+    let text = head;
+    if (!/<\/body>/i.test(head)) {
+      try { text = fs.readFileSync(file, 'utf8'); } catch (_) { return false; }
+    }
+    const body = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(text);
+    if (!body) return false;
+    const left = body[1]
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<div\s+id=["']root["']\s*>\s*<\/div>/i, '')
+      .trim();
+    return left === '';
   }
 
   function listRefs() {
@@ -540,9 +613,11 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
     const was = path.basename(page.file);
     const ext = path.extname(was).slice(1);
     const serial = (/^(\d+)-/.exec(was) || [])[1] || nextSerial();
-    // The number stays at the front of the name, whether or not it was typed back in.
+    // The number orders the files and stays on the file, whether or not it was typed
+    // back in. It is not put into the name shown: the frames on these boards are called
+    // "Above goal", not "12 Above goal", and renaming one should not add a number to it.
     const bare = clean.replace(/^\d+[\s.-]+/, '');
-    clean = `${serial} ${bare}`;
+    clean = bare;
     let next = `${serial}-${slug(bare)}.${ext}`;
     let n = 2;
     while (next !== was && fs.existsSync(dir('pages', next))) {
@@ -551,14 +626,29 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
 
     let text = '';
     try { text = fs.readFileSync(dir('pages', was), 'utf8'); } catch (_) { return { error: 'cannot read it' }; }
-    text = ext === 'astro'
-      ? text.replace(/(\/\/ (?:design|canvas):[^\n]*title=)([^|\n]*)/, (_, head) => `${head}${clean} `)
-      : text.replace(/<title>[^<]*<\/title>/i, `<title>${clean.replace(/</g, '&lt;')}</title>`);
+    // Where the name really is. An Astro page's name is the `title` on its `<Screen>`
+    // tag, which is what the board reads back; it used to be looked for in a
+    // `// design: title=` header that these pages have not had for a long time, so a
+    // rename moved the file and left the name on the board exactly as it was.
+    if (ext === 'astro') {
+      const safe = clean.replace(/"/g, "'");
+      const tag = /<Screen\b[^>]*>/.exec(text);
+      if (tag && /\btitle=/.test(tag[0])) {
+        text = text.replace(tag[0], tag[0].replace(
+          /\btitle=(?:"[^"]*"|'[^']*'|\{\s*['"][^'"]*['"]\s*\})/,
+          `title="${safe}"`
+        ));
+      } else if (tag) {
+        text = text.replace(tag[0], tag[0].replace(/^<Screen\b/, `<Screen title="${safe}"`));
+      }
+    } else {
+      text = text.replace(/<title>[^<]*<\/title>/i, `<title>${clean.replace(/</g, '&lt;')}</title>`);
+    }
     fs.writeFileSync(dir('pages', was), text);
     if (next !== was) {
       fs.renameSync(dir('pages', was), dir('pages', next));
       // The old name is gone because the board renamed it: that is a deliberate removal.
-      if (sync) sync.deleted(dir('pages', was));
+      if (history) history.touched();
     }
 
     const newId = ext === 'astro' ? 'exp:' + next.replace(/\.astro$/, '') : 'canvas:' + next;
@@ -577,42 +667,31 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
     return { ok: true, id: newId, file: `pages/${next}`, title: clean };
   }
 
-  const blankAstro = (title, width, height, grow) => `---
-// designbook: title=${title} | width=${width} | height=${height}${grow ? ' | grow=yes' : ''}
-//
-// ${width} x ${height}. Design to this size: it is what the frame is.
-//
-// Import this project's own components rather than writing new ones, and import them
-// from the project's root, never relative to this file:
-//   import BaseLayout from '/src/layouts/BaseLayout.astro';
-// This folder may live outside the project, and a relative path would walk out of it.
+  // What a new frame starts as.
+  //
+  // A screen and nothing else. Everything around it, the status bar, the navigation bar, the
+  // tab bar, comes from the kit, which is why this is a dozen lines and not two hundred: that
+  // chrome used to be copied into every page, and a change to any of it was a change to every
+  // page, each one drifting a little from the last.
+  const blankAstro = (title, width, height, grow) => {
+    const safe = String(title).replace(/"/g, "'");
+    return `---
+import Screen from '@kit/base/Screen.astro';
+import Stack from '@kit/base/Stack.astro';
+import Text from '@kit/base/Text.astro';
+import IOSStatusBar from '@kit/ios/IOSStatusBar.astro';
+import IOSNavBar from '@kit/ios/IOSNavBar.astro';
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>${title.replace(/</g, '&lt;')}</title>
-    <style>
-      html, body { margin: 0; }
-      html { scrollbar-width: none; }
-      html::-webkit-scrollbar, body::-webkit-scrollbar { width: 0; height: 0; }
-      body {
-        width: ${width}px;
-        ${grow ? `min-height: ${height}px;` : `height: ${height}px; overflow: hidden;`}
-        display: grid;
-        place-items: center;
-        font: 13px/1.5 -apple-system, system-ui, sans-serif;
-        color: #8b9299;
-        background: #fff;
-      }
-    </style>
-  </head>
-  <body>
-    ${width} &times; ${height}
-  </body>
-</html>
+<Screen title="${safe}" width={${width}} height={${height}}${grow ? ' grow' : ''}>
+  <IOSStatusBar />
+  <IOSNavBar title="${safe}" />
+  <Stack padding="var(--db-screen-x, 24px)" gap={12}>
+    <Text size={17} color="var(--db-text-muted, #94A6BA)">${width} x ${height}. Build the screen here.</Text>
+  </Stack>
+</Screen>
 `;
+  };
 
   const blankHtml = (title, width, height, grow) => `<!doctype html>
 <html lang="en">
@@ -832,6 +911,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
           }
           await writeIndex();
           writeRulesFile();
+          freshenTokens();
           server.ws.send({ type: 'custom', event: 'studio:changed', data: { reason } });
         }, 300);
       };
@@ -1001,20 +1081,35 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
       // a second, for as long as it was open. It was the slowest thing here and the
       // reason frames would not sit still.
       const mine = file => file === dir('studio.json') || file === dir('CLAUDE.md')
-        || file === dir('checks.json') || file === dir('.port') || file === dir('.sync.json');
+        || file === dir('checks.json') || file === dir('.port');
 
-      // Keeping the board's files on the default branch, whatever branch this checkout is on.
-      // Off until somebody turns it on for this repo on this machine (see sync.js).
-      sync = createSync({
+      // Every change to the board, committed to the branch you are on. Local only: it
+      // fetches nothing and pushes nothing, and only ever names the board's own files.
+      history = createHistory({
         boardFile: boardPath(),
         studioRoot,
         log: line => server.config.logger.info(line),
-        isWorking: () => working().length > 0,
-        debounce: Number(process.env.STUDIO_SYNC_DEBOUNCE) || 8000
+        debounce: Number(process.env.STUDIO_HISTORY_DEBOUNCE) || 4000
       });
-      sync.onChange(s => { try { server.ws.send({ type: 'custom', event: 'studio:sync', data: s }); } catch (_) {} });
-      server.httpServer && server.httpServer.on('close', () => sync.stop());
-      server.httpServer && server.httpServer.once('listening', () => setTimeout(() => sync.start(), 1500));
+      history.onChange(s => { try { server.ws.send({ type: 'custom', event: 'studio:history', data: s }); } catch (_) {} });
+      server.httpServer && server.httpServer.on('close', () => history.stop());
+      server.httpServer && server.httpServer.on('close', () => { astro.stop(); });
+      // The project's own design system, as the variables the kit reads, kept current with the
+      // code. Started with the board rather than at the first frame, because starting it costs
+      // a tenth of a second and waiting for it at the first frame is a tenth of a second
+      // somebody spends looking at an empty rectangle.
+      // The variables and the app's own faces together: a page drawn in the system font is
+      // wrong in the same way a page drawn in the wrong pink is, and both are read from the
+      // project rather than guessed.
+      function freshenTokens() {
+        try {
+          const root = projectRoot();
+          astro.setTokens([tokenCss(nativeFor(root)), fontCss(readFontFiles(root))].filter(Boolean).join('\n'));
+        } catch (_) {}
+      }
+      freshenTokens();
+      astro.start();
+      server.httpServer && server.httpServer.once('listening', () => setTimeout(() => history.start(), 1500));
       // The same thing for the board file, which is written by hand as well as by us, so
       // it is what the file says rather than which file it is that decides.
       const ourOwnSave = file => file === boardPath() && textOf(file) === ownSave;
@@ -1023,8 +1118,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
         && (inProject(file) || file.startsWith(studioRoot + path.sep) || file === boardPath());
 
       server.watcher.on('change', file => {
-        sync.touched(file);
-        if (file === dir('.working') && !working().length) sync.finished();
+        history.touched();
         if (isComponent(file) || file.endsWith('catalog.jsx')) return invalidateCatalog();
         if (matters(file)) {
           refresh('change', inProject(file));
@@ -1032,7 +1126,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
         }
       });
       server.watcher.on('add', file => {
-        sync.touched(file);
+        history.touched();
         if (isComponent(file)) return invalidateCatalog();
         if (matters(file)) {
           refresh('add', inProject(file));
@@ -1040,8 +1134,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
         }
       });
       server.watcher.on('unlink', file => {
-        sync.touched(file);
-        if (file === dir('.working')) sync.finished();
+        history.touched();
         if (isComponent(file)) return invalidateCatalog();
         if (matters(file)) refresh('unlink', inProject(file));
       });
@@ -1314,26 +1407,27 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
             return send({ items });
           }
 
-          // Keeping the board's files on the default branch (sync.js). The state is also
-          // pushed over the socket, so this is read once and then heard.
-          if (route === '/sync' && req.method === 'GET') {
-            return send({ ...sync.status(), ...(await sync.probe()) });
+          // Read everything again, and draw every frame again.
+          //
+          // The button in the corner used to call the repo scan and then re-read the board
+          // document, which left every frame showing the page it had already loaded: the
+          // board said it had refreshed and what you were looking at had not. This is the
+          // same path a change on disk takes, so one press does what saving a file does.
+          if (route === '/reload' && req.method === 'POST') {
+            try { server.ws.send({ type: 'custom', event: 'studio:changed', data: { reason: 'asked' } }); } catch (_) {}
+            return send({ ok: true });
           }
-          if (route === '/sync/enable' && req.method === 'POST') {
-            const { on } = await body();
-            return send(await sync.enable(!!on));
+
+          // The board's own history on the branch you are on.
+          if (route === '/history' && req.method === 'GET') {
+            return send({ ...history.state, ...(await history.list()) });
           }
-          if (route === '/sync/now' && req.method === 'POST') {
-            return send(await sync.now());
-          }
-          if (route === '/sync/approve' && req.method === 'POST') {
-            const { action } = await body();
-            return send(action === 'revert' ? await sync.revert() : await sync.approve());
-          }
-          if (route === '/sync/resolve' && req.method === 'POST') {
-            const { path: file, take } = await body();
-            if (take !== 'mine' && take !== 'theirs') return send({ error: 'mine or theirs' }, 400);
-            return send(await sync.resolve(String(file || ''), take));
+          if (route === '/history/revert' && req.method === 'POST') {
+            const { sha } = await body();
+            const back = await history.revert(String(sha || ''));
+            // The files on disk changed, so every frame is reading an older page now.
+            if (back.ok) { try { server.ws.send({ type: 'custom', event: 'studio:changed', data: {} }); } catch (_) {} }
+            return send(back);
           }
 
           // A frame's picture, and asking for one to be drawn.
@@ -1355,7 +1449,7 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
               ? found.url
               : `http://${req.headers.host || 'localhost:' + servePort}${found.url}`;
             if (again) forgetPoster(studioRoot, id);
-            const want = { width: found.frame.width, height: found.frame.height, changed: found.changed || 0 };
+            const want = { width: found.frame.width, height: found.frame.height, changed: found.changed || 0, bezel: found.bezel !== false };
             const have = readPoster(studioRoot, id, want);
             if (have && have.fresh) return send({ ok: true, ...have.meta });
 
@@ -1370,6 +1464,26 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
               want,
               ready: () => served(url).then(v => v.ok)
             }).then(answer => {
+              // The picture was taken at the page's own height. If the frame was a
+              // different height, the frame was wrong, and leaving it wrong means the
+              // board draws a tall empty box with the screen in a strip at the top. The
+              // height is taken here rather than waiting for somebody to pan to the frame
+              // at a readable zoom, because a frame nobody has visited is exactly the one
+              // that was broken.
+              //
+              // Not for a frame whose height somebody chose: a fixed size is a decision,
+              // and what does not fit in it is meant to be cropped.
+              if (answer.ok && answer.height && !found.sized && answer.height !== found.frame.height) {
+                try {
+                  const doc = readBoard();
+                  const keep = { ...(doc.frames[id] || {}) };
+                  keep.width = found.frame.width;
+                  keep.height = answer.height;
+                  doc.frames[id] = keep;
+                  writeBoard(doc);
+                  ownSave = textOf(boardPath());
+                } catch (_) {}
+              }
               server.ws.send({ type: 'custom', event: 'studio:poster', data: { id, ok: !!answer.ok, at: answer.at || 0 } });
             }).catch(() => {});
             return send({ queued: true });
@@ -1542,9 +1656,11 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
             const h = Math.max(40, Math.round(Number(height) || 844));
             if (!title) return send({ error: 'a name is needed' }, 400);
 
-            // A page of the project when the project can serve one, a plain file when not.
-            const asAstro = !!liveConfig() && experimentState(projectRoot()).enabled;
-            const ext = asAstro ? 'astro' : 'html';
+            // Every new frame is a page written in components, because the board compiles
+            // them itself now: a plain HTML file would be the same screen with the chrome,
+            // the colours and the type copied into it again.
+            const asAstro = true;
+            const ext = 'astro';
             // Numbered, so the frames you made read in the order you made them and can
             // be spoken about: "the third one". The number stays with the frame when it
             // is renamed.
@@ -1603,8 +1719,6 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
             fs.mkdirSync(dir('.trash'), { recursive: true });
             try { fs.renameSync(from, dir('.trash', name)); }
             catch (err) { return send({ error: err.message }, 500); }
-            // The board deleted it, so it is deleted for everybody: the only kind of delete that is shared.
-            sync.deleted(from);
 
             const doc = readBoard();
             doc.sections = (doc.sections || []).map(b => ({
@@ -1704,6 +1818,35 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
             return send(done, done.error ? 400 : 200);
           }
 
+          // Renaming a whole board in one call.
+          //
+          // One at a time is a rename and then a reload and then the next id, and a frame's
+          // id changes when it is renamed, so a list read before the first call is wrong by
+          // the second. Here the ids are resolved as it goes and every result is returned,
+          // so a run that half worked says which half.
+          //
+          // Each item is { page, title }. `page` is a frame id, or its file name, or the
+          // title it has now, because those are the three things somebody has in hand.
+          if (route === '/frames/rename' && req.method === 'POST') {
+            const asked = await body();
+            const list = Array.isArray(asked.frames) ? asked.frames : [];
+            if (!list.length) return send({ error: 'nothing to rename' }, 400);
+            const done = [];
+            for (const item of list) {
+              const want = String(item.page || item.id || '').trim();
+              const pages = listPages();
+              const found =
+                pages.find(p => p.id === want) ||
+                pages.find(p => path.basename(p.file) === want) ||
+                pages.find(p => p.title === want);
+              if (!found) { done.push({ page: want, error: 'no such frame' }); continue; }
+              const out = renameFrame(found.id, item.title);
+              done.push({ page: want, ...out });
+            }
+            const bad = done.filter(d => d.error).length;
+            return send({ ok: bad === 0, renamed: done.length - bad, failed: bad, frames: done });
+          }
+
           if (route === '/export' && req.method === 'POST') {
             const asked = await body();
             const found = listPages().find(p => p.id === asked.page);
@@ -1761,6 +1904,18 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
                 if (patch.fit) keep.fit = true;
                 else delete keep.fit;
               }
+              // Which device this frame is shown on, when it is not the one its page was
+              // written for. Empty puts it back to the page's own.
+              if (typeof patch.device === 'string') {
+                if (patch.device && patch.device !== 'own') keep.device = patch.device;
+                else delete keep.device;
+              }
+              // Whether the device is drawn round this frame. On is the default, so only
+              // off is written down; a board made before this one reads as every frame on.
+              if (typeof patch.bezel === 'boolean') {
+                if (patch.bezel) delete keep.bezel;
+                else keep.bezel = false;
+              }
               doc.frames[id] = keep;
             }
             writeBoard(doc);
@@ -1777,6 +1932,18 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
               const incoming = await body();
               if (!Array.isArray(incoming.sections)) return send({ error: 'sections must be a list' }, 400);
               const doc = readBoard();
+              // Never write away a board's sections.
+              //
+              // How the board is split is a decision somebody made, and the list of
+              // frames in each one is where those frames live. An empty list arriving
+              // while the board still has frames is not somebody deleting every section,
+              // it is a render that had not finished, and it costs a board its Web and
+              // App the moment it is written. Taking them all away is done by removing
+              // them one at a time, which goes through the same route with the rest
+              // still in it.
+              if (!incoming.sections.length && (doc.sections || []).length && listPages().length) {
+                return send({ ok: true, kept: true });
+              }
               const seen = new Set();
               doc.sections = incoming.sections.map((band, i) => {
                 let id = String(band.id || slug(band.name || 'section')) || 'section';
@@ -1804,6 +1971,25 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
               writeBoard(doc);
               return send({ ok: true });
             }
+          }
+
+          // A reference, thrown away the same way a frame is. The file goes to
+          // .designbook/.trash and its note goes with it, so nothing is destroyed by a
+          // right click on a thumbnail.
+          if (route === '/ref/delete' && req.method === 'POST') {
+            const { name } = await body();
+            const safe = path.basename(name || '');
+            if (!safe) return send({ error: 'which reference?' }, 400);
+            const from = dir('refs', safe);
+            if (!fs.existsSync(from)) return send({ error: 'no such reference' }, 404);
+            const stamp = `${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}-${safe}`;
+            fs.mkdirSync(dir('.trash'), { recursive: true });
+            try { fs.renameSync(from, dir('.trash', stamp)); }
+            catch (err) { return send({ error: err.message }, 500); }
+            const file = dir('refs.json');
+            const doc = readJson(file, { items: {} });
+            if (doc.items && doc.items[safe]) { delete doc.items[safe]; writeJson(file, doc); }
+            return send({ ok: true, trashed: `.trash/${stamp}` });
           }
 
           if (route === '/refs') {
@@ -1883,6 +2069,21 @@ export function studioPlugin({ appRoot, studioRoot, repoRoot, boardFile }) {
       server.httpServer && server.httpServer.on('close', () => { stopMeasuring(); });
 
       // The board folder's own files.
+      // A page written in components, served from the board's own address so that choosing
+      // something inside it is reading this document rather than asking a browser to draw the
+      // page again somewhere else. See astro.js for why that matters.
+      server.middlewares.use(ASTRO_ROUTE, async (req, res, next) => {
+        let rel;
+        try { rel = new URL(req.url, 'http://localhost').pathname; } catch (_) { return next(); }
+        // The path here has already had the route taken off it, which is the address Astro
+        // knows the page by.
+        let query = '';
+        try { query = new URL(req.url, 'http://localhost').search; } catch (_) {}
+        const made = await astro.page(rel, { query });
+        res.writeHead(made.status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(made.html);
+      });
+
       server.middlewares.use('/@studio', async (req, res, next) => {
         let rel;
         try { rel = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); }

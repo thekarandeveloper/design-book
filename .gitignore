@@ -1,3 +1,10 @@
 
 # Built packages
 .build/
+
+# The board runs on a few hundred megabytes of node packages, fetched on the machine
+# that needs them. Its built bundle is made from app/src and never shipped in the
+# package either (.vscodeignore).
+node_modules/
+app/dist/
+.DS_Store

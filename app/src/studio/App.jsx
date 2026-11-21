@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useHash, parseRoute, go } from './useHash.js';
-import { find, getStudio, newFrame, onStudioChanged, runSetup, onSetupStep } from './api.js';
+import { find, getStudio, newFrame, onStudioChanged, runSetup, onSetupStep, reloadBoard } from './api.js';
 import { FRAME_GROUPS } from './frames.js';
 import { PagesBoard } from './PagesBoard.jsx';
 import { Moodboard } from './Moodboard.jsx';
 import { Gallery } from './Gallery.jsx';
 import { SystemPage } from './SystemPage.jsx';
 import { Editor } from './Editor.jsx';
-import { SyncPill } from './Sync.jsx';
 
 // One bar, and the board under it.
 //
@@ -36,6 +35,7 @@ export function App() {
     () => (new URLSearchParams(location.search).get('theme') === 'light' ? 'light' : 'dark')
   );
   const [selected, setSelected] = useState('');  // the frame the board has selected
+  const [section, setSection] = useState('');    // the section it has chosen, for a new frame
   const [focus, setFocus] = useState('');        // the frame to bring into view next
 
   const reload = useCallback(() => getStudio().then(setStudio).catch(() => setStudio(null)), []);
@@ -66,13 +66,29 @@ export function App() {
     return () => window.removeEventListener('message', on);
   }, [reload]);
 
-  // A new frame lands next to the frame you were looking at when you made it, and the
-  // board goes to it. Nothing selected, and it goes last, where new work goes.
+  // Where a new frame lands.
+  //
+  // Beside the frame you were looking at when you made it, because that is what you are
+  // comparing it with. No frame chosen but a section chosen, and it goes at the end of
+  // that section: that is what pressing a section's name is for, and on a board split
+  // into Web and App it is the difference between the new frame landing where you are
+  // working and landing at the bottom of the board. Neither, and it goes last, where
+  // new work went before any of this.
+  // The name of the section a new frame would go into, so the button can say where.
+  const sectionName = (() => {
+    const sections = studio?.sections || [];
+    if (!sections.length) return '';
+    const chosen = sections.find(b => b.frames.includes(selected)) || sections.find(b => b.id === section);
+    return (chosen || sections[sections.length - 1]).name || '';
+  })();
+
   const addFrame = async (title, width, height, grow) => {
     const sections = studio?.sections || [];
     const beside = selected && sections.some(b => b.frames.includes(selected)) ? selected : '';
-    const section = sections.length ? sections[sections.length - 1].id : '';
-    const made = await newFrame(title, width, height, { section, after: beside, grow });
+    const into = sections.some(b => b.id === section)
+      ? section
+      : sections.length ? sections[sections.length - 1].id : '';
+    const made = await newFrame(title, width, height, { section: into, after: beside, grow });
     await reload();
     if (made?.id) setFocus(made.id);
   };
@@ -88,7 +104,7 @@ export function App() {
       <div className="st-main">
         {editing ? <Editor page={route.page} onSaved={reload} /> : null}
         {route.view === 'pages'
-          ? <PagesBoard studio={studio} onSelect={setSelected} focus={focus} />
+          ? <PagesBoard studio={studio} onSelect={setSelected} onSection={setSection} focus={focus} />
           : null}
         {route.view === 'moodboard' ? <Moodboard /> : null}
         {route.view === 'components' ? <Gallery /> : null}
@@ -98,11 +114,15 @@ export function App() {
       {/* The thing you reach for while looking at the board sits in the corner nearest
           your hand, with its name on it. The drawer of components is a symbol in the
           bar: you know where it is, and it does not need a word. */}
-      {route.view === 'pages' && !studio.setup?.needed ? <NewFrame onAdd={addFrame} /> : null}
+      {route.view === 'pages' && !studio.setup?.needed
+        ? <NewFrame onAdd={addFrame} where={sectionName} />
+        : ADDS[route.view]
+          ? <AddHere what={ADDS[route.view]} />
+          : null}
 
       {/* The repo keeps being worked on while the board is open, and a file somebody
           added is not on the board until something looks for it. This looks. */}
-      {route.view === 'pages' && !studio.setup?.needed ? <Rescan onDone={reload} /> : null}
+      {!studio.setup?.needed ? <Rescan onDone={reload} /> : null}
 
       {/* Floating, so the whole window belongs to the work and the controls sit over it. */}
       <header className="st-bar">
@@ -118,19 +138,32 @@ export function App() {
           </nav>
         )}
 
-        <button
-          className={'st-icon' + (route.view === 'components' ? ' is-on' : '')}
-          onClick={() => go(route.view === 'components' ? '/pages' : '/components')}
-          title={route.view === 'components' ? 'Back to the board' : 'Components'}
-          aria-label="Components"
-        >
-          <GridIcon />
-        </button>
-
-        {route.view === 'pages' && !studio.setup?.needed ? <SyncPill /> : null}
-
         <Search onPick={id => { go('/pages'); setFocus(id); }} />
       </header>
+    </div>
+  );
+}
+
+// What the corner button adds, on the views that are not the board.
+//
+// It stays in the same corner everywhere, because a button that moves is a button you
+// look for. What it does is the view's own: the view listens for `st-add` and opens the
+// thing it adds. A signal rather than a prop, because the button and the view are
+// cousins rather than parent and child, and threading a handler through the router to
+// reach them would be more wiring than the one thing it carries.
+const ADDS = { moodboard: 'a reference', system: 'a token' };
+
+function AddHere({ what }) {
+  return (
+    <div className="st-picker st-picker--top">
+      <button
+        className="st-floater"
+        title={`Add ${what}`}
+        aria-label={`Add ${what}`}
+        onClick={() => window.dispatchEvent(new CustomEvent('st-add'))}
+      >
+        <PlusIcon />
+      </button>
     </div>
   );
 }
@@ -168,6 +201,7 @@ function Rescan({ onDone }) {
     try {
       const summary = await runSetup();
       await onDone();
+      await reloadBoard().catch(() => {});
       const made = summary.pages || 0;
       const live = (summary.routes || []).length;
       ask({
@@ -181,6 +215,15 @@ function Rescan({ onDone }) {
     } finally {
       setRunning(false);
       setStep(null);
+      // The whole canvas, loaded again.
+      //
+      // Re-reading the board document and re-keying the frames left things behind: a
+      // frame that had already failed stayed failed, a poster that had been drawn stayed
+      // drawn, and the board said it had refreshed while what you were looking at had
+      // not. This is the plain thing, and it is what the word means. Where the board is
+      // and how far it is zoomed are kept in this browser, so the view comes back as it
+      // was.
+      setTimeout(() => window.location.reload(), 400);
     }
   };
 
@@ -234,7 +277,7 @@ function RescanIcon() {
 }
 
 // New: a frame at a size something actually ships at.
-function NewFrame({ onAdd }) {
+function NewFrame({ onAdd, where }) {
   const [open, setOpen] = useState(false);
   const [w, setW] = useState('1080');
   const [h, setH] = useState('1080');
@@ -267,13 +310,20 @@ function NewFrame({ onAdd }) {
   };
 
   return (
-    <div className="st-picker st-picker--corner" ref={ref}>
-      <button className="st-floater" title="A frame at a size something ships at" onClick={() => setOpen(o => !o)}>
+    <div className="st-picker st-picker--top" ref={ref}>
+      {/* A mark, not a word. It is the only thing in that corner and its menu says what
+          it makes, so the word was carrying nothing. */}
+      <button
+        className={'st-floater' + (open ? ' is-on' : '')}
+        title={where ? `A new frame, into ${where}` : 'A new frame'}
+        aria-label="New frame"
+        onClick={() => setOpen(o => !o)}
+      >
         <PlusIcon />
-        New frame
       </button>
       {open ? (
-        <div className="st-menu st-menu--wide st-menu--up">
+        <div className="st-menu st-menu--wide">
+          {where ? <div className="st-menu-note st-menu-where">into {where}</div> : null}
           {FRAME_GROUPS.map(([group, grow, sizes]) => (
             <div key={group}>
               <div className="st-menu-note">{group}</div>
@@ -453,14 +503,3 @@ function SearchIcon() {
   );
 }
 
-function GridIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor"
-         strokeWidth="1.8" strokeLinejoin="round">
-      <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
-      <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
-      <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
-      <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
-    </svg>
-  );
-}

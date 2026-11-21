@@ -23,6 +23,9 @@ export class LiveSource {
     this.proc = null;
     this.port = 0;
     this.printedPort = 0;
+    // Every localhost address this command printed, in the order it printed them. One is
+    // not enough: see the exit handler.
+    this.printedPorts = [];
     this.status = 'idle';
     this.external = false;
     this.output = [];
@@ -75,7 +78,12 @@ export class LiveSource {
         const m = text.match(/https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/);
         // Kept whether or not this is the first answer: the port it printed is the one
         // to attach to even when the process then exits.
-        if (m) { this.printedPort = Number(m[1]); done(this.printedPort); }
+        if (m) {
+          const port = Number(m[1]);
+          this.printedPort = port;
+          if (!this.printedPorts.includes(port)) this.printedPorts.push(port);
+          done(port);
+        }
       };
       proc.stdout.on('data', onData);
       proc.stderr.on('data', onData);
@@ -85,8 +93,18 @@ export class LiveSource {
       // it, and this canvas simply attaches to the server that was already there.
       proc.on('exit', async code => {
         this.proc = null;
-        const port = this.port || this.printedPort || 0;
-        if (port && await answersSoon(port)) {
+        // Whichever of the addresses it printed actually answers, newest first.
+        //
+        // One port was not enough. Next, told its port is taken, prints the port it was
+        // going to use, says Ready, and only then works out that another dev server
+        // owns the project and prints THAT one before exiting. So the first address is
+        // the one that never came up and the last is the one to attach to; taking the
+        // first left the board with a dead port and every live frame empty, which is
+        // what "the board will not open in this project" turned out to be.
+        const tried = [...new Set([...this.printedPorts].reverse().concat(this.port || []))]
+          .filter(Boolean);
+        for (const port of tried) {
+          if (!(await answersSoon(port))) continue;
           this.external = true;
           this.port = port;
           this.status = 'running';
@@ -131,8 +149,13 @@ export function discoverRoutes(cwd) {
   found.push(...fromDir(path.join(cwd, 'src', 'pages'), /\.(astro|md|mdx|html)$/, name =>
     name.replace(/\.(astro|md|mdx|html)$/, '')));
 
-  // Next, app router: a folder with a page file is a route.
-  found.push(...fromDir(path.join(cwd, 'app'), /^page\.(jsx?|tsx?|mdx)$/, () => ''));
+  // Next, app router: a folder with a page file is a route, and the route is the FOLDER.
+  // Returning nothing here made every page.tsx in the tree the one route `/`, so a site
+  // of twenty pages came up as a board of one.
+  found.push(...fromDir(path.join(cwd, 'app'), /^page\.(jsx?|tsx?|mdx)$/, rel => {
+    const dir = path.dirname(rel);
+    return dir === '.' ? '' : dir;
+  }));
 
   // Next, pages router.
   found.push(...fromDir(path.join(cwd, 'pages'), /\.(jsx?|tsx?|mdx)$/, name =>

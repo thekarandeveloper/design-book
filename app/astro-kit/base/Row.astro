@@ -1,0 +1,45 @@
+---
+// A horizontal row: a list row, a toolbar line, a label with a value at the end.
+//
+// It is a Stack with the defaults a row almost always wants, so a screen does not repeat
+// them. The 12px gap and centre alignment are what a row of a label and an icon needs;
+// pass other values when the row is not that.
+
+interface Props {
+  gap?: number | string;
+  align?: string;
+  justify?: string;
+  padding?: string;
+  width?: number | string;
+  height?: number | string;
+}
+
+const {
+  gap = 12,
+  align = 'center',
+  justify,
+  padding,
+  width,
+  height
+} = Astro.props;
+
+const len = (v) => (typeof v === 'number' ? `${v}px` : v);
+
+const style = [
+  `gap:${len(gap)}`,
+  `align-items:${align}`,
+  justify ? `justify-content:${justify}` : null,
+  padding ? `padding:${padding}` : null,
+  width ? `width:${len(width)}` : null,
+  height ? `height:${len(height)}` : null
+].filter(Boolean).join(';');
+---
+
+<div class="row" style={style}><slot /></div>
+
+<style>
+  .row {
+    display: flex;
+    flex-direction: row;
+  }
+</style>

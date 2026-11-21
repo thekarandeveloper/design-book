@@ -1,0 +1,206 @@
+// What has to be true for a board to work, checked without opening one.
+//
+// The slow faults here are the ones nobody sees until a board is open: a kit component that
+// does not compile, a page that cannot find the kit, the project's own colours not reaching
+// the page, a frame whose size the board reads wrongly out of the file. Each of those is one
+// line below, and each runs in a throwaway folder, never in anybody's repo.
+//
+//   node tools/selftest.mjs
+//
+// It says what passed, what failed, and ends with how many. Anything that fails is printed
+// with what was expected, because a test that only says "failed" is a test somebody has to
+// rerun by hand to learn anything.
+
+import fs from 'node:fs';
+import http from 'node:http';
+import os from 'node:os';
+import path from 'node:path';
+import { AstroSource, astroMeta } from './astro.js';
+import { readNativeTokens, tokenCss } from './native.js';
+
+const appDir = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+let passed = 0;
+let failed = 0;
+const ok = (what, good, detail = '') => {
+  if (good) { passed++; console.log(`  ok    ${what}`); }
+  else { failed++; console.log(`  FAIL  ${what}${detail ? `\n          ${detail}` : ''}`); }
+};
+
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'db-selftest-'));
+const clean = () => { try { fs.rmSync(temp, { recursive: true, force: true }); } catch (_) {} };
+process.on('exit', clean);
+
+// ── the kit compiles ────────────────────────────────────────────────────────
+
+console.log('\nThe kit');
+const { parse } = await import('@astrojs/compiler');
+let components = 0;
+for (const folder of ['base', 'ios', 'android']) {
+  const dir = path.join(appDir, 'astro-kit', folder);
+  for (const name of fs.readdirSync(dir).filter(f => f.endsWith('.astro'))) {
+    components++;
+    const found = await parse(fs.readFileSync(path.join(dir, name), 'utf8'));
+    if (found.diagnostics && found.diagnostics.length) {
+      ok(`${folder}/${name}`, false, JSON.stringify(found.diagnostics).slice(0, 200));
+    }
+  }
+}
+ok(`${components} components compile`, components > 20);
+
+// Every value a component uses has to be a variable with a fallback, or a project without a
+// design system gets a page of missing colours.
+let bareHex = [];
+for (const folder of ['base', 'ios', 'android']) {
+  const dir = path.join(appDir, 'astro-kit', folder);
+  for (const name of fs.readdirSync(dir).filter(f => f.endsWith('.astro'))) {
+    const text = fs.readFileSync(path.join(dir, name), 'utf8');
+    for (const line of text.split('\n')) {
+      // A hex inside `var(--x, #fff)` is the fallback and is meant to be there.
+      const without = line.replace(/var\([^)]*\)/g, '');
+      if (/:\s*#[0-9a-fA-F]{3,8}\b/.test(without) && !/^\s*(\/\/|\*|<!--)/.test(line)) {
+        bareHex.push(`${folder}/${name}: ${line.trim().slice(0, 70)}`);
+      }
+    }
+  }
+}
+ok('no colour is written outside a variable', bareHex.length === 0, bareHex.slice(0, 3).join('\n          '));
+
+// ── what a page says about its frame ────────────────────────────────────────
+
+console.log('\nReading a page');
+const pages = path.join(temp, 'board', '.designbook', 'pages');
+fs.mkdirSync(pages, { recursive: true });
+fs.writeFileSync(path.join(pages, '01-one.astro'), `---
+import Screen from '@kit/base/Screen.astro';
+import Stack from '@kit/base/Stack.astro';
+import Text from '@kit/base/Text.astro';
+import Card from '@kit/base/Card.astro';
+import Icon from '@kit/base/Icon.astro';
+import IOSNavBar from '@kit/ios/IOSNavBar.astro';
+import IOSTabBar from '@kit/ios/IOSTabBar.astro';
+import IOSGroupedList from '@kit/ios/IOSGroupedList.astro';
+import IOSListRow from '@kit/ios/IOSListRow.astro';
+import IOSButton from '@kit/ios/IOSButton.astro';
+---
+<Screen title="One" width={393} height={852} group="tests">
+  <IOSNavBar title="One" />
+  <Stack padding="16px" gap={12}>
+    <Card padding="16px"><Text size={17}>A card</Text></Card>
+    <IOSGroupedList header="Group"><IOSListRow title="A row" icon="gear" first last /></IOSGroupedList>
+    <IOSButton label="Go" variant="filled" full />
+    <Icon name="chevron.right" size={16} />
+  </Stack>
+  <IOSTabBar tabs={[{ icon: 'house.fill', label: 'Home', active: true }]} />
+</Screen>
+`);
+fs.writeFileSync(path.join(pages, '02-android.astro'), `---
+import Screen from '@kit/base/Screen.astro';
+import AndroidTopAppBar from '@kit/android/AndroidTopAppBar.astro';
+import AndroidBottomBar from '@kit/android/AndroidBottomBar.astro';
+import AndroidNavBar from '@kit/android/AndroidNavBar.astro';
+---
+<Screen title="Two" device="android" width={360} height={800}>
+  <AndroidTopAppBar title="Two" />
+  <AndroidBottomBar items={[{ icon: 'home', label: 'Home', active: true }]} />
+  <AndroidNavBar />
+</Screen>
+`);
+const meta = astroMeta(path.join(pages, '01-one.astro'));
+ok('a page states its frame, as the device it is in', meta.width === '474' && meta.height === '934', JSON.stringify(meta));
+ok('and its group', meta.group === 'tests', JSON.stringify(meta.group));
+const android = astroMeta(path.join(pages, '02-android.astro'));
+ok('a device sets the frame when no size is given', android.width === '382' && android.height === '822', JSON.stringify(android));
+
+// ── the project's own design system ─────────────────────────────────────────
+
+console.log('\nThe project\'s own values');
+const kotlin = path.join(temp, 'board', 'shared', 'design');
+fs.mkdirSync(kotlin, { recursive: true });
+fs.writeFileSync(path.join(kotlin, 'ColorSystem.kt'), `
+object AppColors {
+  val brand = ColorGroup(
+    light = ColorScale(level1 = "#001122", level2 = "#112233", level3 = "#223344", level4 = "#334455",
+      level5 = "#2E7BF6", level6 = "#4A8EF8", level7 = "#6BA4FA", level8 = "#8FBAFB",
+      level9 = "#B3CFFC", level10 = "#CBDEFD", level11 = "#DDE9FE", level12 = "#EDF3FF", level13 = "#F7FAFF"),
+    dark = ColorScale(level1 = "#000000", level2 = "#0A1222", level3 = "#0F1B33", level4 = "#152747",
+      level5 = "#1C345E", level6 = "#24457A", level7 = "#2F5A9C", level8 = "#4A82D6",
+      level9 = "#6FA0E4", level10 = "#94BCEE", level11 = "#B8D3F5", level12 = "#D8E7FA", level13 = "#EFF5FD")
+  )
+  val theme = ThemeColorBundle(
+    primary = ColorPair(light = brand.light.level5, dark = brand.dark.level8),
+    surface = ColorPair(light = brand.light.level13, dark = brand.dark.level2)
+  )
+}
+`);
+fs.writeFileSync(path.join(kotlin, 'DesignTokens.kt'), `
+object DesignTokens {
+  const val SPACE_4 = 16f
+  const val SCREEN_HORIZONTAL = 24f
+  const val RADIUS_XL = 16f
+}
+`);
+const native = readNativeTokens(path.join(temp, 'board'));
+ok('a colour role is followed to its hex', !!native && native.roles.some(r => r.light === '#2E7BF6'),
+  native ? JSON.stringify(native.roles.slice(0, 2)) : 'nothing read');
+const css = tokenCss(native);
+ok('and comes out as the kit reads it', /--db-primary: #2E7BF6/.test(css), css.slice(0, 120));
+ok('a size comes with it', /--db-screen-x: 24px/.test(css));
+
+// ── a page, compiled and served the way the board serves it ────────────────
+
+console.log('\nCompiling and serving');
+const studioRoot = path.join(temp, 'board', '.designbook');
+const astro = new AstroSource({ studioRoot, appDir, log: () => {} });
+astro.setTokens(css);
+const started = await astro.start();
+ok('the compiler starts', !!started, astro.why);
+
+if (started) {
+  const serve = http.createServer(async (req, res) => {
+    const made = await astro.page(req.url.replace(/\?.*$/, ''));
+    res.writeHead(made.status, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(made.html);
+  });
+  await new Promise(r => serve.listen(0, '127.0.0.1', r));
+  const port = serve.address().port;
+  const get = async p => {
+    const res = await fetch(`http://127.0.0.1:${port}${p}`);
+    return { status: res.status, html: await res.text() };
+  };
+
+  const one = await get('/01-one');
+  ok('a page answers', one.status === 200, `answered ${one.status}`);
+  ok('with what is on it', /A card/.test(one.html) && /A row/.test(one.html));
+  ok('with the chrome the kit draws', /9:41/.test(one.html), 'the navigation bar draws the status bar above it');
+  // 393 is the screen; 417 is the phone it is in. The board frames the device, because the
+  // island over the top of a page and the corners that cut it are part of the screen.
+  // 393 is the screen; 474 is the phone it is in, which is what the board frames.
+  ok('with the frame the board reads', /designbook-width" content="474"/.test(one.html),
+    (one.html.match(/designbook-width" content="\d+"/) || [''])[0]);
+  ok('and the device round it', /class="db-shot"/.test(one.html) && /data-bezel/.test(one.html));
+  ok('with the project\'s own values on it', /--db-primary: #2E7BF6/.test(one.html));
+  ok('and no scrollbar', /scrollbar-width:none/.test(one.html.replace(/\s/g, '')));
+  // The styles come inline in dev, which is why there is no link to check. What does have to
+  // point at the compiler is everything the page fetches: served from the board, a relative
+  // address would be asked of the board, which does not have it.
+  ok('the kit\'s styles are on the page', /--db-radius-bottom-sheet/.test(one.html), 'tokens.css did not come through');
+  const relative = [...one.html.matchAll(/\ssrc="(\/[^"]*)"/g)].map(m => m[1]);
+  ok('everything it fetches points at the compiler', relative.length === 0, relative.slice(0, 3).join(' '));
+
+  const two = await get('/02-android');
+  ok('an Android page answers', two.status === 200);
+  ok('at its own size', /designbook-width" content="382"/.test(two.html),
+    (two.html.match(/designbook-width" content="\d+"/) || [''])[0]);
+
+  const missing = await get('/99-not-here');
+  ok('a page that is not there says so in the board\'s own words',
+    /No page at this address/.test(missing.html) && !/astro/i.test(missing.html.slice(0, 400)),
+    `answered ${missing.status}: ${missing.html.slice(0, 80)}`);
+
+  serve.close();
+  await astro.stop();
+}
+
+console.log(`\n${passed} passed, ${failed} failed`);
+clean();
+process.exit(failed ? 1 : 0);

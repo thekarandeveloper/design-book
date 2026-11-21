@@ -1,0 +1,137 @@
+---
+// A Material 3 button, in its five kinds.
+//
+// The one thing got wrong without it is the shape. A Material button is a full pill, 40
+// tall, with 24 of padding at each side, and a button drawn with a 8 or 12 radius is an iOS
+// or a web button wearing Android's colours. The disabled state is the second: Material does
+// not fade the whole button, it puts the text at 38 percent on a surface at 12 percent.
+//
+// Label 14, medium weight. Android's label is 14 and does not take iOS's 17.
+
+import Icon from '../base/Icon.astro';
+
+const {
+  label = '',
+  variant = 'filled',
+  icon = '',
+  size = 'regular',
+  full = false,
+  disabled = false,
+  scheme = 'light'
+} = Astro.props;
+---
+
+<span
+  class="btn"
+  data-scheme={scheme}
+  data-variant={variant}
+  data-size={size}
+  data-full={full ? 'true' : 'false'}
+  data-disabled={disabled ? 'true' : 'false'}
+  data-icon={icon ? 'true' : 'false'}
+>
+  {icon && (
+    <span class="icon">
+      <Icon name={icon} size={18} color="currentColor" filled={false} />
+    </span>
+  )}
+  <span class="label">{label}</span>
+</span>
+
+<style>
+  .btn {
+    /* 40 tall and 24 of side padding are Material's own. Small is the 32 tall one used in a
+       row of chips and dense cards. */
+    --btn-height: var(--db-android-button-h, 40px);
+    --btn-pad: var(--db-space-6, 24px);
+    --btn-bg: var(--db-primary, #2E7BF6);
+    --btn-ink: var(--db-on-primary, #FFFFFF);
+    --btn-border: transparent;
+
+    height: var(--btn-height);
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--db-space-2, 8px);
+    padding: 0 var(--btn-pad);
+    /* A pill, always. This is the line between a Material button and every other button. */
+    border-radius: var(--db-radius-full, 999px);
+    background: var(--btn-bg);
+    color: var(--btn-ink);
+    border: 1px solid var(--btn-border);
+    font-family: var(--db-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+  }
+
+  .btn[data-size='small'] {
+    --btn-height: var(--db-android-button-sm-h, 32px);
+    --btn-pad: var(--db-space-4, 16px);
+  }
+
+  .btn[data-full='true'] {
+    display: flex;
+    width: 100%;
+  }
+
+  /* With an icon the leading side is tighter, because the glyph already reads as an edge. */
+  .btn[data-icon='true'] {
+    padding-left: var(--db-space-4, 16px);
+  }
+
+  .label {
+    font-size: var(--db-android-label, 14px);
+    font-weight: 500;
+    line-height: 1;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+
+  .icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+  }
+
+  /* Tonal is the action colour at a low mix, so the label can stay the action colour. */
+  .btn[data-variant='tonal'] {
+    --btn-bg: color-mix(in srgb, var(--db-primary, #2E7BF6) 14%, var(--db-surface, #FFFFFF));
+    --btn-ink: var(--db-primary, #2E7BF6);
+  }
+
+  .btn[data-variant='outlined'] {
+    --btn-bg: transparent;
+    --btn-ink: var(--db-primary, #2E7BF6);
+    --btn-border: var(--db-border, #D8E3EF);
+  }
+
+  /* A text button carries no shape, so it also carries less padding: 12, or it looks like a
+     word floating a long way from what it does. */
+  .btn[data-variant='text'] {
+    --btn-bg: transparent;
+    --btn-ink: var(--db-primary, #2E7BF6);
+    --btn-pad: var(--db-space-3, 12px);
+  }
+
+  .btn[data-variant='elevated'] {
+    --btn-bg: var(--db-surface-raised, #F7FAFD);
+    --btn-ink: var(--db-primary, #2E7BF6);
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--db-text, #152233) 14%, transparent);
+  }
+
+  /* Material's disabled state, at its own two numbers: the text colour at 38 percent, on the
+     text colour at 12 percent. It is one rule for every kind, because a disabled outlined
+     button and a disabled filled button look the same in Material. */
+  .btn[data-disabled='true'] {
+    --btn-bg: color-mix(in srgb, var(--db-text, #152233) 12%, transparent);
+    --btn-ink: color-mix(in srgb, var(--db-text, #152233) 38%, transparent);
+    --btn-border: transparent;
+    box-shadow: none;
+  }
+
+  /* A disabled text button has no surface at all, so the 12 percent fill would be a block
+     that is not there when the button is live. */
+  .btn[data-variant='text'][data-disabled='true'] {
+    --btn-bg: transparent;
+  }
+</style>

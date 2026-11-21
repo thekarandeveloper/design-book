@@ -1,0 +1,213 @@
+---
+// A sheet: the surface that comes up over a screen and stops part way down.
+//
+// What would be got wrong without it: a sheet is not a card at the bottom of the page. It is
+// pinned to the bottom and to both sides, it starts at a measured height from the top (its
+// detent), and only its top two corners are round, because the other two are off the screen.
+//
+// AND THE SCREEN BEHIND IT IS PART OF THE SHEET. That is the thing that reads as a sheet
+// rather than as a page with a rounded top: iOS takes the screen that presented it, shrinks
+// it a little, rounds its corners to the device's own, and dims it. Leave that out and the
+// strip above the sheet is a flat colour somebody chose, which is what every page on this
+// board was doing for itself. It is drawn here now, so a page says `<IOSSheet>` and gets the
+// whole presentation.
+//
+// Measured off the real thing: the large detent's top edge is the safe area plus 10, the
+// corners are `DS.Radius.bottomSheet` at 40, the screen behind scales to 0.92 about its own
+// top edge, and the dim over it is black at 20 per cent.
+
+interface Props {
+  /** 'medium' is half the screen. 'large' leaves the screen behind it showing at the top.
+      A number of 1 or less is a share of the screen's height, anything more is its height
+      in pixels. */
+  detent?: 'medium' | 'large' | number;
+  radius?: string;
+  grabber?: boolean;
+  background?: string;
+  scheme?: 'light' | 'dark';
+  /** The screen the sheet came up over: shrunk, rounded and dimmed behind it. Pass false
+   *  for a sheet that is the first thing on the screen, where there is nothing behind. */
+  behind?: boolean;
+  /** How dark the screen behind goes. iOS uses about a fifth. */
+  dim?: number;
+  /** What colour the dim is. Black is what iOS itself uses, but an app that draws its own
+   *  scrim dims in its own ink, and a warm scrim over a warm screen is not black at the
+   *  same strength: it stays warm. A page that wrote that colour itself would put the dim
+   *  in the wrong layer, so it is named here. */
+  dimColor?: string;
+  /** Shrink the screen behind, for the stacked look a second sheet over a first one has.
+   *  The first sheet over a full screen does not shrink it, so this is off by default. */
+  shrink?: number;
+  /** The status bar, which belongs to the screen behind. Off for a sheet that is not the
+   *  top of the screen, or one drawn inside another. */
+  statusBar?: boolean;
+  statusTint?: 'dark' | 'light';
+}
+
+const {
+  detent = 'large',
+  // A sheet on a screen that scrolls.
+  //
+  // A sheet is pinned to the top, the sides and the bottom of the frame, so it is exactly one
+  // screen tall and anything longer is cut off at the bottom with nothing to say so. Most of
+  // the screens that are sheets in a real app scroll, so the page says `grow` on its Screen
+  // and the sheet says `grow` here: it is then laid out in the ordinary way, starting at the
+  // same detent, and the frame grows with it. Same picture, nothing lost.
+  grow = false,
+  radius = 'var(--db-radius-bottom-sheet, 40px)',
+  grabber = true,
+  background,
+  scheme = 'light',
+  behind = true,
+  dim = 0.2,
+  dimColor = '#000000',
+  shrink = 1,
+  statusBar = true,
+  statusTint = 'dark'
+} = Astro.props;
+
+import IOSStatusBar from './IOSStatusBar.astro';
+
+// Where the top edge of the sheet is. The large detent stops short of the top so a sliver of
+// what is behind stays visible, which is the thing that tells a person it is a sheet and not
+// a screen.
+// The large detent stops at the safe area, which is where it sits on the real thing:
+// measured off a photograph of the Profile sheet, its top edge is level with the bottom of
+// the status bar, so the sliver of the screen behind that stays showing is the status bar
+// and nothing more.
+const H = 'var(--db-screen-h, 852px)';
+const LARGE = 'var(--db-safe-top, 59px)';
+let top = LARGE;
+let offset = LARGE;
+if (detent === 'medium') { top = 'var(--db-ios-sheet-medium-top, 50%)'; offset = `calc(${H} * 0.5)`; }
+else if (typeof detent === 'number') {
+  top = detent <= 1 ? `${Math.max(0, (1 - detent)) * 100}%` : `calc(100% - ${detent}px)`;
+  offset = detent <= 1 ? `calc(${H} * ${Math.max(0, 1 - detent)})` : `calc(${H} - ${detent}px)`;
+}
+
+const vars = [
+  `--db-ios-sheet-top: ${top}`,
+  `--db-ios-sheet-offset: ${offset}`,
+  `--db-ios-sheet-radius: ${radius}`,
+  `--db-ios-sheet-dim: ${dim}`,
+  `--db-ios-sheet-dim-color: ${dimColor}`,
+  `--db-ios-sheet-shrink: ${shrink}`,
+  background ? `--db-ios-sheet-bg: ${background}` : ''
+].filter(Boolean).join('; ');
+---
+
+{behind && (
+  <div class="under" style={vars}>
+    <div class="under-screen"><slot name="behind" /></div>
+    <div class="under-dim"></div>
+    {/* The clock belongs to the screen underneath, not to the sheet: that is whose status
+        bar is showing in the strip above a sheet. A page does not draw one of its own. */}
+    {statusBar && <IOSStatusBar tint={statusTint} />}
+  </div>
+)}
+
+<section class="sheet" data-scheme={scheme} data-grow={grow ? 'true' : undefined} style={vars}>
+  {grabber && <span class="grabber"></span>}
+  <div class="head"><slot name="header" /></div>
+  <div class="body"><slot /></div>
+</section>
+
+<style>
+  /* The screen the sheet came up over. It is pinned to the frame rather than to the sheet,
+     because it is the whole screen underneath, and it never takes a pointer. */
+  .under {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    /* What shows where the screen behind has shrunk away from the edge: the phone itself,
+       which is black. Without this the page's own background showed in the gap, which read
+       as a stripe of the wrong colour above the sheet. */
+    background: var(--db-cutout, #000000);
+  }
+
+  /* Shrunk about its own top edge and rounded to the device's corner, which is what iOS
+     does to the presenting screen. */
+  .under-screen {
+    position: absolute;
+    inset: 0;
+    transform: scale(var(--db-ios-sheet-shrink, 1));
+    transform-origin: top center;
+    border-radius: var(--db-screen-radius, 40px);
+    overflow: hidden;
+    background: var(--db-background, #F2F2F7);
+  }
+
+  .under-dim {
+    position: absolute;
+    inset: 0;
+    background: color-mix(in srgb, var(--db-ios-sheet-dim-color, #000000) calc(var(--db-ios-sheet-dim, 0.2) * 100%), transparent);
+  }
+
+  /* The clock sits on the screen behind, above its dim. */
+  .under > :global(.status) {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
+  }
+
+  /* Laid out in the ordinary way, starting where the sheet would have started, and as tall as
+     what is in it. The detent is a share of the screen's own height, which the Screen
+     publishes, so the gap above the sheet is the same whichever way round this is. */
+  .sheet[data-grow='true'] {
+    position: relative;
+    /* `top` still moves a relatively positioned element, and the margin below is what
+       places this one, so the two were adding up and the sheet sat twice as far down. */
+    top: auto;
+    /* From the top of the screen, not from whatever came before it: the strip above a
+       sheet is a measured distance and nothing else may add to it. The screen behind is
+       absolutely positioned, so the sheet is the first thing in the flow. */
+    margin-top: var(--db-ios-sheet-offset);
+    min-height: calc(var(--db-screen-h, 852px) - var(--db-ios-sheet-offset));
+  }
+
+  .sheet[data-grow='true'] .body {
+    overflow: visible;
+  }
+
+  .sheet {
+    position: absolute;
+    top: var(--db-ios-sheet-top, 10%);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    background: var(--db-ios-sheet-bg, var(--db-surface, #FFFFFF));
+    /* Only the top corners: the bottom two are past the bottom of the phone. */
+    border-top-left-radius: var(--db-ios-sheet-radius, var(--db-radius-bottom-sheet, 40px));
+    border-top-right-radius: var(--db-ios-sheet-radius, var(--db-radius-bottom-sheet, 40px));
+    /* So content with square corners cannot stick out of the round ones. */
+    overflow: hidden;
+    color: var(--db-text, #152233);
+    font-family: var(--db-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+    box-shadow: var(--db-ios-sheet-shadow, 0 -8px 32px rgba(0, 0, 0, 0.18));
+  }
+
+  .grabber {
+    flex: none;
+    align-self: center;
+    width: var(--db-ios-grabber-width, 36px);
+    height: var(--db-ios-grabber-height, 5px);
+    margin-top: var(--db-space-2, 8px);
+    border-radius: var(--db-radius-full, 999px);
+    background: color-mix(in srgb, var(--db-text, #152233) 20%, transparent);
+  }
+
+  .head { flex: none; }
+
+  .body {
+    flex: 1 1 auto;
+    /* A frame is a picture, so nothing scrolls: content longer than the sheet is cut off at
+       the bottom, which is what a photograph of the screen would show. */
+    overflow: hidden;
+  }
+</style>

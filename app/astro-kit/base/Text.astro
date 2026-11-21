@@ -1,0 +1,59 @@
+---
+// Text at one of the platform scales.
+//
+// It never decides a size. Type does not convert between platforms, iOS body is 17 and
+// Android body is 14, so the platform folder that knows the scale passes the number. With
+// no size given the text inherits, which is what a caller wants inside a styled block.
+
+interface Props {
+  as?: string;
+  size?: number;
+  weight?: number | string;
+  color?: string;
+  align?: string;
+  /** Clamp to this many lines and end the last one with an ellipsis. */
+  lines?: number;
+  mono?: boolean;
+}
+
+const {
+  as = 'p',
+  size,
+  weight,
+  color = 'var(--db-text, #152233)',
+  align,
+  lines,
+  mono = false
+} = Astro.props;
+
+const Tag = as;
+
+const style = [
+  size ? `font-size:${size}px` : null,
+  weight ? `font-weight:${weight}` : null,
+  `color:${color}`,
+  align ? `text-align:${align}` : null,
+  mono ? 'font-family:var(--db-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)' : null,
+  // The clamp count is the only part of the clamp that changes, so it is inline and the
+  // mechanics that go with it are in the class below.
+  lines ? `-webkit-line-clamp:${lines}` : null
+].filter(Boolean).join(';');
+---
+
+<Tag class:list={['text', { clamp: !!lines }]} style={style}><slot /></Tag>
+
+<style>
+  .text {
+    /* A heading or a paragraph arrives with a browser margin that no screen design wants. */
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  /* The old flexbox box is still the only way to clamp to a number of lines in every
+     browser the board draws with. */
+  .clamp {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>

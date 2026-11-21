@@ -20,7 +20,9 @@ import { Setup } from './Setup.jsx';
 const GAP = 88;      // between frames in a line
 const HEADER = 112;  // under a section's line, before its frames start
 const PAD = 240;     // under the frames, where the next section's name sits
-const BETWEEN = 0;   // nothing: one section ends where the next one begins
+// Air between sections. At nothing, one section ended where the next began and the two
+// read as one long wall; the gap is what makes a section look like a section.
+const BETWEEN = 140;
 
 // A frame is left alone for this long after it has been measured, even if its own file
 // is saved again: a spell of work on a page is many saves, and measuring is a real page
@@ -54,7 +56,7 @@ if (typeof window !== 'undefined' && !window.__canvasSourceListener) {
   });
 }
 
-export function PagesBoard({ studio: initial, onSelect, focus }) {
+export function PagesBoard({ studio: initial, onSelect, onSection, focus }) {
   const [studio, setStudio] = useState(initial);
   const [docs, setDocs] = useState({});
   const [edits, setEdits] = useState({});
@@ -96,8 +98,10 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
   // Copying goes through the editor's own clipboard, which is allowed everywhere; the
   // page's own is tried too, for a board opened in a browser.
   const copyName = useCallback(page => {
-    ask({ type: 'copy', text: page.title });
-    try { navigator.clipboard && navigator.clipboard.writeText(page.title); } catch (_) {}
+    // With a line break after it, so pasting leaves the cursor on its own line.
+    const text = page.title + '\n';
+    ask({ type: 'copy', text });
+    try { navigator.clipboard && navigator.clipboard.writeText(text); } catch (_) {}
     say(page.id, 'name copied');
   }, [say]);
 
@@ -162,6 +166,26 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
   // A live frame is another origin and cannot be measured from here, so the same page is
   // fetched once through this server and measured there. The frame you are looking at is
   // untouched, which is why its hot reload still works.
+  // The device drawn round a frame, on or off, one frame at a time.
+  //
+  // It is a property of the frame and not of the page, so it is saved to the board file
+  // beside the frame's size and the page is never edited: two frames of the same page can
+  // be shown differently, and a board opened on another machine looks the same. The server
+  // takes the band off the frame's size and asks for the page without the device, so the
+  // list has to come back before the frame is redrawn.
+  const onBezel = useCallback((id, next) => {
+    putPositions({ [id]: { bezel: next } }).then(reload).catch(() => {});
+  }, [reload]);
+
+  // Every frame in one go, which is how a device is chosen: a section is shown on one
+  // device or it is a section of mixed-up frames.
+  const onDevice = useCallback((ids, device) => {
+    if (!ids.length) return;
+    const patch = {};
+    for (const id of ids) patch[id] = { device };
+    putPositions(patch).then(reload).catch(() => {});
+  }, [reload]);
+
   const onFit = useCallback(frame => {
     const page = (studio?.pages || []).find(p => p.id === frame.id);
     if (!page) return;
@@ -397,6 +421,10 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
     height: page.frame.height,
     // As tall as what is in it, rather than a height somebody chose.
     fit: !!page.fit,
+    // How much of the frame is the device drawn round it, and whether it is drawn at all.
+    // A page whose band is 0 has no device to show, so it gets no switch.
+    band: page.band || 0,
+    bezel: page.bezel === false ? false : true,
     // Being measured right now. A page its dev server has not served before can take a
     // while, and a size selector that says nothing looks broken.
     measuring: measuring?.id === page.id,
@@ -412,7 +440,10 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
     // Has its own scrolling: a page in an iframe that is taller than the frame. Not known
     // yet counts as yes, so a frame is never locked out of its wheel by a measurement that
     // has not come back.
-    scrolls: !!page.url && !page.fit && (natural[page.id] === undefined || natural[page.id] > page.frame.height + 2),
+    // A page inside a device is a window onto something longer, so it always takes the
+    // wheel: the frame cannot grow to show the rest, which is the whole point of a device.
+    scrolls: !!page.url && (page.rolls
+      || (!page.fit && (natural[page.id] === undefined || natural[page.id] > page.frame.height + 2))),
     // Changes when the frame loads its page again, which puts it back at the top.
     nonce: reloads[page.id] || 0,
     // Changes whenever the frame's file or anything else in the project did, which is when
@@ -423,6 +454,9 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
     // Its page is the board's own, on this origin: it can be read in place.
     local: !!page.url && page.url.startsWith('/'),
     path: page.path || '',
+    // The same file said short. `path` is absolute, which is this machine's business;
+    // what goes on the clipboard should be the path inside the board folder.
+    file: page.file || '',
     // Nothing but the name until the name is hovered. A row of buttons over every frame
     // is a row of buttons you read past, and the board is for looking at the work.
     actions: [
@@ -450,14 +484,18 @@ export function PagesBoard({ studio: initial, onSelect, focus }) {
       <Board
         frames={frames}
         bands={placed.bands}
+        onPosters={ids => ids.forEach(id => ensurePoster(id, true).catch(() => {}))}
         onDrop={onDrop}
         onAddSection={onAddSection}
         onRenameSection={onRenameSection}
         onRemoveSection={onRemoveSection}
         onResize={onResize}
         onFit={onFit}
+        onBezel={onBezel}
+        onDevice={onDevice}
         onReload={onReload}
         onSelect={id => { setChosen(id); if (onSelect) onSelect(id); }}
+        onSection={onSection}
         onRename={onRename}
         onDelete={onDelete}
         onCheck={onCheck}

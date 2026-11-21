@@ -1,0 +1,19 @@
+---
+// Empty space in a stack or a row.
+//
+// With a size it is that many pixels; with nothing it takes whatever space is left, which
+// is how a toolbar pushes its last item to the far end. Only flex-basis is set, so the
+// same component works in a column and in a row without knowing which it is in.
+
+interface Props {
+  size?: number;
+}
+
+const { size } = Astro.props;
+
+const style = typeof size === 'number'
+  ? `flex:0 0 ${size}px`
+  : 'flex:1 1 auto;min-width:0;min-height:0';
+---
+
+<div aria-hidden="true" style={style}></div>

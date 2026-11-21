@@ -1,0 +1,188 @@
+---
+// Material 3's top app bar: the title, the navigation icon, and whatever actions sit at
+// the right.
+//
+// The one thing got wrong without it is the height. Material has four of these bars and
+// they are 64, 112, 152 and 64 tall, and a bar drawn at iOS's 44 makes every screen under
+// it start in the wrong place. A medium or large bar also carries its title on a second
+// line, under the icons, which is the part a hand written bar never does.
+//
+// Slot `actions`: the icons at the right, in the order they are read.
+
+import Icon from '../base/Icon.astro';
+import AndroidStatusBar from './AndroidStatusBar.astro';
+
+const {
+  title = '',
+  // The status bar belongs to the bar under it: drawn separately they are two colours, and
+  // the join shows on every screen whose bar is not the page colour.
+  statusBar = true,
+  statusTint = 'dark',
+  time = '9:41',
+  variant = 'small',
+  navigation = 'none',
+  scheme = 'light',
+  background = '',
+  elevated = false
+} = Astro.props;
+
+// Medium and large carry the title below the icon row. Small and centre keep it on the row.
+const stacked = variant === 'medium' || variant === 'large';
+const navIcon = navigation === 'back' ? 'arrow_back' : navigation === 'menu' ? 'menu' : '';
+---
+
+<header
+  class="bar"
+  data-scheme={scheme}
+  data-variant={variant}
+  data-nav={navigation}
+  data-elevated={elevated ? 'true' : 'false'}
+  style={background ? `--bar-bg: ${background}` : undefined}
+>
+  {statusBar && <AndroidStatusBar tint={statusTint} time={time} scheme={scheme} />}
+
+  <div class="row">
+    {navIcon && (
+      <span class="nav">
+        <Icon name={navIcon} size={24} color="currentColor" />
+      </span>
+    )}
+
+    {!stacked && <h1 class="title">{title}</h1>}
+
+    <span class="spacer"></span>
+
+    <span class="actions" data-android-bar-actions>
+      <slot name="actions" />
+    </span>
+  </div>
+
+  {stacked && <h1 class="title title-stacked">{title}</h1>}
+</header>
+
+<style>
+  .bar {
+    /* The four Material heights, as aliases so a project can retune one and still have the
+       spec value as the fallback. */
+    --bar-height: var(--db-android-appbar-h, 64px);
+    --bar-title: var(--db-android-title, 22px);
+    --bar-bg: var(--db-surface, #FFFFFF);
+    --bar-ink: var(--db-text, #152233);
+    --bar-pad: var(--db-space-1, 4px);
+    --bar-edge: var(--db-space-4, 16px);
+
+    height: var(--bar-height);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    background: var(--bar-bg);
+    color: var(--bar-ink);
+    font-family: var(--db-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+    padding: 0 var(--bar-pad);
+    flex: none;
+  }
+
+  .bar[data-variant='medium'] {
+    --bar-height: var(--db-android-appbar-medium-h, 112px);
+    --bar-title: var(--db-android-headline, 24px);
+  }
+
+  .bar[data-variant='large'] {
+    --bar-height: var(--db-android-appbar-large-h, 152px);
+    --bar-title: var(--db-android-headline-lg, 28px);
+  }
+
+  /* A scrolled bar in Material 3 is not a shadow, it is a tinted surface. The hairline and
+     the very soft shadow are there because a board page is a still picture, where a tint
+     alone can read as a mistake. */
+  .bar[data-elevated='true'] {
+    --bar-bg: var(--db-surface-raised, #F7FAFD);
+    box-shadow: 0 1px 0 0 var(--db-border, #D8E3EF), 0 2px 6px -4px var(--db-border, #D8E3EF);
+  }
+
+  /* The icon row is always 64 tall, on every variant. On the taller bars the title sits
+     under it, which is what makes them taller. */
+  .row {
+    height: var(--db-android-appbar-h, 64px);
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--db-space-1, 4px);
+  }
+
+  /* 48 is Material's touch target. The glyph inside is 24, so it lands 16 from the screen
+     edge once the bar's own 4 of padding is counted. */
+  .nav {
+    width: var(--db-android-target, 48px);
+    height: var(--db-android-target, 48px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+  }
+
+  .title {
+    margin: 0;
+    font-size: var(--bar-title);
+    font-weight: 500;
+    line-height: 1.2;
+    color: var(--bar-ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* 12 plus the bar's own 4 is Material's 16 from the edge when there is no icon. */
+    padding-left: var(--db-space-3, 12px);
+  }
+
+  /* With a navigation icon the title starts 56 from the edge: 4 of bar, 48 of target, 4 here. */
+  .bar[data-nav='back'] .row .title,
+  .bar[data-nav='menu'] .row .title {
+    padding-left: var(--db-space-1, 4px);
+  }
+
+  .title-stacked {
+    padding-left: var(--db-space-3, 12px);
+    padding-bottom: var(--db-space-3, 12px);
+    display: flex;
+    align-items: flex-end;
+    flex: 1;
+  }
+
+  .spacer { flex: 1; }
+
+  .actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--db-space-1, 4px);
+    flex: none;
+  }
+
+  /* A centred title is centred on the bar, not on what is left between the icons, so it is
+     laid over the row instead of sitting in it. It takes no pointer events because a frame
+     is a picture and the icons under it must stay readable. */
+  .bar[data-variant='centre'] {
+    position: relative;
+  }
+
+  .bar[data-variant='centre'] .row .title {
+    position: absolute;
+    left: var(--db-android-target, 48px);
+    right: var(--db-android-target, 48px);
+    text-align: center;
+    padding-left: 0;
+    pointer-events: none;
+  }
+</style>
+
+<style is:global>
+  /* The action icons are slotted in by the page, so they do not carry this component's
+     scope and a scoped rule cannot reach them. Keyed on this bar's own attribute, so the
+     rule cannot touch anything else on the page. */
+  [data-android-bar-actions] > * {
+    width: var(--db-android-target, 48px);
+    height: var(--db-android-target, 48px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+</style>

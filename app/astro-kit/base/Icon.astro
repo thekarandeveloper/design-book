@@ -1,0 +1,284 @@
+---
+// A stand-in for a platform icon.
+//
+// SF Symbols and Material icons do not render in a browser, and shipping either font with
+// a board page is not allowed, so each one is drawn here as a small SVG. A drawing is only
+// close to the real glyph, never the same, so the name always goes out as `data-symbol` on
+// the svg: whoever builds the screen for real reads the name, not the picture.
+//
+// Material names map onto the same shapes, because the two platforms want the same icon in
+// the same place and the kit should not hold the drawing twice.
+
+interface Props {
+  name: string;
+  size?: number;
+  color?: string;
+  /** Stroke width, in the 24 unit box below, so it scales with the icon. */
+  weight?: number;
+  filled?: boolean;
+}
+
+const { name, size = 20, color = 'currentColor', weight = 1.8, filled = false } = Astro.props;
+
+// Every shape is drawn in a 24 by 24 box, so one stroke width and one set of coordinates
+// work at any size. Strokes are round, which is what both platforms draw.
+const SHAPES = {
+  paintbrush: '<path d="M4.6 19.4c1.8.6 3.6-.4 4.2-2.1.4-1.2-.2-2.3-1.1-2.9-1-.6-2.3-.4-3 .5-.8 1-.5 2.2-1.3 3.2a4 4 0 0 1-.8.7z"/><path d="M9.6 14.6L18.4 5.8a2 2 0 0 1 2.8 2.8l-8.8 8.8"/>',
+  'calendar.badge.clock': '<path d="M20.4 11.2V7.4a2.4 2.4 0 0 0-2.4-2.4H6A2.4 2.4 0 0 0 3.6 7.4v10.2A2.4 2.4 0 0 0 6 20h5.4"/><path d="M3.6 9.6h16.8M8 3.4v3.2M16 3.4v3.2"/><circle cx="17.6" cy="17.4" r="4"/><path d="M17.6 15.6v1.9l1.3.9"/>',
+  externaldrive: '<rect x="2.8" y="12.4" width="18.4" height="7" rx="2.4"/><path d="M5.4 12.4l1.9-6a2.4 2.4 0 0 1 2.3-1.7h4.8a2.4 2.4 0 0 1 2.3 1.7l1.9 6"/><circle data-cut cx="17.4" cy="15.9" r="1.1"/>',
+  'icloud.and.arrow.up': '<path d="M7.4 17.4h9.8a3.6 3.6 0 0 0 .4-7.2 5.4 5.4 0 0 0-10.4-1.2 3.7 3.7 0 0 0 .2 8.4z"/><path data-cut d="M12 20.6v-7.2M9.2 16.2L12 13.4l2.8 2.8"/>',
+  'rectangle.portrait.and.arrow.right': '<path d="M13.8 3.6H7.4A1.8 1.8 0 0 0 5.6 5.4v13.2a1.8 1.8 0 0 0 1.8 1.8h6.4"/><path d="M11.6 12h9.2M17.8 9l3 3-3 3"/>',
+  'hand.raised.app': '<rect x="3.4" y="3.4" width="17.2" height="17.2" rx="4.4"/><path data-cut d="M9.4 14.6V8.8a1.3 1.3 0 0 1 2.6 0v3.4M12 12.2V7.9a1.3 1.3 0 0 1 2.6 0v4.3M14.6 12.2v-2.6a1.3 1.3 0 0 1 2.6 0v4.4a3.6 3.6 0 0 1-3.6 3.6h-.8a3.1 3.1 0 0 1-2.5-1.3l-1.4-2"/>',
+  pill: '<rect x="2.6" y="8.4" width="18.8" height="7.2" rx="3.6" transform="rotate(-40 12 12)"/><path data-cut d="M9 7.6l7.4 7.4"/>',
+  'person.3.sequence': '<circle cx="5.6" cy="7.4" r="2.4"/><path d="M2 14.2a3.6 3.6 0 0 1 7.2 0"/><circle cx="12" cy="7.4" r="2.4"/><path d="M8.4 14.2a3.6 3.6 0 0 1 7.2 0"/><circle cx="18.4" cy="7.4" r="2.4"/><path d="M14.8 14.2a3.6 3.6 0 0 1 7.2 0"/><path d="M4 19.4h16"/>',
+  circle: '<circle cx="12" cy="12" r="8.6"/>',
+  'chart.line.uptrend.xyaxis': '<path d="M3.6 3.6v15a1.8 1.8 0 0 0 1.8 1.8h15"/><path d="M7.4 15.8l3.4-3.8 2.8 2.4 5.4-6.2"/><path d="M15 8.2h4.2v4.2"/>',
+  'waveform.path.ecg': '<path d="M2.6 12h4l2-5 3.4 10 2.4-5h6.4"/>',
+  'note.text': '<path d="M4.6 5.4a2 2 0 0 1 2-2h7.6l5.2 5.2v9.8a2 2 0 0 1-2 2H6.6a2 2 0 0 1-2-2z"/><path data-cut d="M14.2 3.4v5.2h5.2M8.2 12.4h7M8.2 15.6h4.6"/>',
+  'heart.slash': '<path d="M12 20.2s-7.8-4.6-7.8-10a4 4 0 0 1 7.8-1.4 4 4 0 0 1 7.8 1.4c0 2-1.1 3.9-2.5 5.5"/><path d="M3.6 3.6l16.8 16.8"/>',
+  fish: '<path d="M3.2 12c3-4.2 6.4-6.3 10.2-6.3 3 0 5.6 1.3 7.4 3.1-1.8 1.8-1.8 4.6 0 6.4-1.8 1.8-4.4 3.1-7.4 3.1-3.8 0-7.2-2.1-10.2-6.3z"/><circle data-cut cx="10" cy="10.4" r="1"/><path data-cut d="M6.4 12h4.4"/>',
+  leaf: '<path d="M4.6 19.4c0-7.2 4.6-12.4 14.8-12.8 0 9.6-5.2 13.6-12.4 13.6"/><path data-cut d="M7.6 16.4c2.4-2.6 5.2-4.2 8.6-5.2"/>',
+  // Asked for by the Sakhi pages and not here before. Each is the SF Symbols name.
+  person: '<circle cx="12" cy="8.2" r="3.8"/><path d="M4.6 20.4a7.4 7.4 0 0 1 14.8 0"/>',
+  iphone: '<rect x="6.6" y="2.6" width="10.8" height="18.8" rx="2.6"/><path d="M10.4 5.2h3.2"/>',
+  stethoscope: '<path d="M6 3.4v5.2a4.2 4.2 0 0 0 8.4 0V3.4"/><path d="M4.4 3.4h3.2M12.8 3.4H16"/><path d="M10.2 12.8v2.6a4.4 4.4 0 0 0 8.8 0v-1.2"/><circle cx="19" cy="12" r="2.2"/>',
+  'doc.on.doc': '<rect x="3.6" y="3.6" width="11" height="13.4" rx="2.4"/><path d="M7.6 20.4h9A2.8 2.8 0 0 0 19.4 17.6V8.4"/>',
+  'bed.double': '<path d="M3.2 18.6v-5.2a2.4 2.4 0 0 1 2.4-2.4h12.8a2.4 2.4 0 0 1 2.4 2.4v5.2"/><path d="M3.2 15.6h17.6M3.2 18.6v1.8M20.8 18.6v1.8"/><path d="M6 11V7.8a2.2 2.2 0 0 1 2.2-2.2h7.6A2.2 2.2 0 0 1 18 7.8V11"/>',
+  graduationcap: '<path d="M12 4.2L2.6 8.6 12 13l9.4-4.4z"/><path d="M6.6 10.6v4.6c0 1.8 2.4 3.2 5.4 3.2s5.4-1.4 5.4-3.2v-4.6"/><path d="M21.4 8.6v5"/>',
+  'graduationcap.circle': '<circle cx="12" cy="12" r="8.6"/><path data-cut d="M12 7.4L6.2 10.2 12 13l5.8-2.8z"/><path data-cut d="M8.8 11.6v2.6c0 1 1.4 1.9 3.2 1.9s3.2-.9 3.2-1.9v-2.6"/>',
+  'person.crop.circle.badge.checkmark': '<circle cx="11" cy="11.6" r="8.2"/><circle data-cut cx="11" cy="9.6" r="2.6"/><path data-cut d="M6 18a5.4 5.4 0 0 1 10 0"/><circle cx="19.2" cy="18.4" r="3.6" fill="currentColor" stroke="none"/><path d="M17.6 18.4l1.2 1.2 2.1-2.3" stroke="var(--db-icon-cut, #FFFFFF)" fill="none"/>',
+  'person.2.slash': '<circle cx="9.2" cy="8.4" r="3.2"/><path d="M3.4 19.4a5.8 5.8 0 0 1 11.6 0"/><path d="M15.6 6a3.2 3.2 0 0 1 0 6.4M16.8 14.4a5.8 5.8 0 0 1 3.8 5"/><path d="M3.4 3.4l17.2 17.2"/>',
+  'person.2.wave.2': '<circle cx="8.6" cy="9.6" r="3"/><path d="M3.2 19.8a5.4 5.4 0 0 1 10.8 0"/><circle cx="16.4" cy="9.6" r="2.4"/><path d="M15.2 14.6a5 5 0 0 1 4.2 5.2"/><path d="M20 3.6a4.4 4.4 0 0 1 0 5.2M22.4 2a7.2 7.2 0 0 1 0 8.4"/>',
+  'arrow.triangle.2.circlepath': '<path d="M3.8 11.4a8.2 8.2 0 0 1 13.6-5.6"/><path d="M20.2 12.6a8.2 8.2 0 0 1-13.6 5.6"/><path d="M14 5.4h3.8v3.8M10 18.6H6.2v-3.8"/>',
+  'arrow.triangle.2.circlepath.circle': '<circle cx="12" cy="12" r="8.6"/><path data-cut d="M7.2 11.4A4.9 4.9 0 0 1 15.4 8"/><path data-cut d="M16.8 12.6A4.9 4.9 0 0 1 8.6 16"/><path data-cut d="M13.4 7.2h2.2v2.2M10.6 16.8H8.4v-2.2"/>',
+  'phone.arrow.up.right': '<path d="M14.2 3.4h6.4v6.4M20.6 3.4l-5.8 5.8"/><path d="M11.4 4.4H6.9A2.4 2.4 0 0 0 4.5 7.1c.5 7 5.4 11.9 12.4 12.4a2.4 2.4 0 0 0 2.7-2.4v-4.5"/>',
+  'person.badge.plus': '<circle cx="9.6" cy="8.6" r="3.4"/><path d="M3.4 19.8a6.2 6.2 0 0 1 12.4 0"/><path d="M18.4 12.4v6M15.4 15.4h6"/>',
+  switch2: '<rect x="2.6" y="7.4" width="18.8" height="9.2" rx="4.6"/><circle cx="16.8" cy="12" r="3.2" fill="currentColor" stroke="none"/>',
+  // Named by a real app's settings screens. SF Symbols often says a thing three ways
+  // (`doc`, `doc.text`, `doc.text.fill`), so the plain name carries the drawing and the rest
+  // point at it: a page gets the symbol it asked for rather than the unknown square.
+  'heart.text.square': '<rect x="3.6" y="3.6" width="16.8" height="16.8" rx="4"/><path data-cut d="M12 16.2s-3.4-2-3.4-4.4a1.7 1.7 0 0 1 3.4-.9 1.7 1.7 0 0 1 3.4.9c0 2.4-3.4 4.4-3.4 4.4z"/>',
+  'person.3': '<circle cx="12" cy="9" r="2.8"/><path d="M7 19.4a5 5 0 0 1 10 0"/><path d="M5.6 8.6a2.4 2.4 0 1 1 1.2 4.4M18.4 8.6a2.4 2.4 0 1 0-1.2 4.4M2.6 18.4a4 4 0 0 1 3.4-3.6M21.4 18.4a4 4 0 0 0-3.4-3.6"/>',
+  'chevron.left.forwardslash.chevron.right': '<path d="M8.4 7.6L4.6 12l3.8 4.4M15.6 7.6L19.4 12l-3.8 4.4M13.4 5.6l-2.8 12.8"/>',
+  'app.badge': '<rect x="4" y="4" width="13" height="16" rx="3.4"/><circle cx="18.6" cy="6.2" r="3"/>',
+  'lock.shield': '<path d="M12 3.2l7 2.6v5.4c0 4.2-2.9 7.6-7 9.6-4.1-2-7-5.4-7-9.6V5.8z"/><rect data-cut x="9.2" y="10.6" width="5.6" height="4.6" rx="1.2"/><path data-cut d="M10.4 10.6V9.4a1.6 1.6 0 0 1 3.2 0v1.2"/>',
+  'doc.text': '<path d="M14 3.4H7.4A1.8 1.8 0 0 0 5.6 5.2v13.6a1.8 1.8 0 0 0 1.8 1.8h9.2a1.8 1.8 0 0 0 1.8-1.8V7.8z"/><path data-cut d="M14 3.4v4.4h4.4M8.6 12.4h6.8M8.6 15.6h6.8"/>',
+  'hand.raised': '<path d="M9 11V5.6a1.5 1.5 0 0 1 3 0V11M12 10.6V4.8a1.5 1.5 0 0 1 3 0V11M15 11V6.6a1.5 1.5 0 0 1 3 0V15a5.4 5.4 0 0 1-5.4 5.4h-1A4.6 4.6 0 0 1 8 18.6l-2.2-3a1.7 1.7 0 0 1 2.6-2.1L9 14.4"/>',
+  network: '<circle cx="12" cy="12" r="8.4"/><path d="M3.6 12h16.8M12 3.6c2.2 2.3 3.4 5.3 3.4 8.4s-1.2 6.1-3.4 8.4c-2.2-2.3-3.4-5.3-3.4-8.4s1.2-6.1 3.4-8.4z"/>',
+  'chart.bar.doc.horizontal': '<path d="M14 3.4H7.4A1.8 1.8 0 0 0 5.6 5.2v13.6a1.8 1.8 0 0 0 1.8 1.8h9.2a1.8 1.8 0 0 0 1.8-1.8V7.8z"/><path data-cut d="M14 3.4v4.4h4.4M8.8 11.4h4M8.8 14.2h6M8.8 17h3"/>',
+  'scale.3d': '<path d="M4.6 19.4V4.6h14.8M4.6 19.4l5-5M4.6 12h3M4.6 8.2h2M9.4 19.4v-3M13.2 19.4v-2"/>',
+  'questionmark.circle': '<circle cx="12" cy="12" r="8.4"/><path data-cut d="M9.8 9.6a2.3 2.3 0 0 1 4.4.8c0 1.6-2.2 1.8-2.2 3.2"/><circle data-cut cx="12" cy="16.6" r="0.9" stroke-width="1.8"/>',
+  'bubble.left': '<path d="M20 11.4c0 3.8-3.6 6.8-8 6.8a9.6 9.6 0 0 1-2.6-.35L4.8 19.6l1.1-3.1A6.6 6.6 0 0 1 4 11.4c0-3.8 3.6-6.8 8-6.8s8 3 8 6.8z"/>',
+  'chevron.up.chevron.down': '<path d="M8 10.2L12 6.2l4 4M16 13.8L12 17.8l-4-4"/>',
+  'bubble.left.and.bubble.right': '<path d="M13.4 10.6c0 2.8-2.7 5-6 5a7.4 7.4 0 0 1-1.6-.2L3.4 16.6l.7-2.2a4.9 4.9 0 0 1-1.5-3.8c0-2.8 2.7-5 6-5s4.8 2.2 4.8 5z"/><path d="M10.2 16.6c.7 1.9 2.9 3.3 5.5 3.3.6 0 1.2-.07 1.7-.2l2.4 1.2-.7-2.2a4.9 4.9 0 0 0 1.5-3.6c0-2.3-1.8-4.2-4.2-4.8"/>',
+  'square.grid.2x2': '<rect x="4" y="4" width="7" height="7" rx="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.8"/>',
+  'bell.badge': '<path d="M17.4 16.6H6.6l1.1-1.7v-3.9a4.3 4.3 0 0 1 8.6 0v3.9z"/><path data-cut d="M10.4 19.4a1.8 1.8 0 0 0 3.2 0"/><circle cx="18" cy="6.4" r="2.6"/>',
+  'arrow.clockwise': '<path d="M19.4 12a7.4 7.4 0 1 1-2.2-5.3"/><path d="M19.6 4.6v4.2h-4.2"/>',
+  'checkmark.circle': '<circle cx="12" cy="12" r="8.4"/><path data-cut d="M8.4 12.2l2.6 2.6 4.6-5"/>',
+  'xmark.circle': '<circle cx="12" cy="12" r="8.4"/><path data-cut d="M9.4 9.4l5.2 5.2M14.6 9.4l-5.2 5.2"/>',
+  'exclamationmark.circle': '<circle cx="12" cy="12" r="8.4"/><path data-cut d="M12 7.6v5"/><circle data-cut cx="12" cy="16.4" r="0.9" stroke-width="1.8"/>',
+  'text.bubble': '<path d="M20 11.4c0 3.8-3.6 6.8-8 6.8a9.6 9.6 0 0 1-2.6-.35L4.8 19.6l1.1-3.1A6.6 6.6 0 0 1 4 11.4c0-3.8 3.6-6.8 8-6.8s8 3 8 6.8z"/><path d="M8.6 9.8h6.8M8.6 12.8h4.4"/>',
+  'slider.horizontal.3': '<path d="M3.6 7.4h16.8M3.6 12h16.8M3.6 16.6h16.8"/><circle cx="9" cy="7.4" r="1.9" fill="currentColor" stroke="none"/><circle cx="15.4" cy="12" r="1.9" fill="currentColor" stroke="none"/><circle cx="7.4" cy="16.6" r="1.9" fill="currentColor" stroke="none"/>',
+  // What a real app's screens turn out to ask for. Each one is the simplest honest drawing of
+  // the symbol, in the same 24 box, so a row of them looks like one set.
+  globe: '<circle cx="12" cy="12" r="8.4"/><path d="M3.6 12h16.8M12 3.6c2.2 2.3 3.4 5.3 3.4 8.4s-1.2 6.1-3.4 8.4c-2.2-2.3-3.4-5.3-3.4-8.4s1.2-6.1 3.4-8.4z"/>',
+  moon: '<path d="M20 14.2A8.4 8.4 0 0 1 9.8 4a8.4 8.4 0 1 0 10.2 10.2z"/>',
+  'sun.max': '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.6v2.2M12 19.2v2.2M4.3 4.3l1.6 1.6M18.1 18.1l1.6 1.6M2.6 12h2.2M19.2 12h2.2M4.3 19.7l1.6-1.6M18.1 5.9l1.6-1.6"/>',
+  sparkles: '<path d="M12 3.4l1.5 4.1 4.1 1.5-4.1 1.5-1.5 4.1-1.5-4.1L6.4 9l4.1-1.5z"/><path d="M18 14.6l.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8z"/>',
+  drop: '<path d="M12 3.4c3 3.6 5.4 6.5 5.4 9.3A5.4 5.4 0 0 1 6.6 12.7c0-2.8 2.4-5.7 5.4-9.3z"/>',
+  bolt: '<path d="M13.2 2.8L5.6 13.4h5.1l-.9 7.8 7.6-10.6h-5.1z"/>',
+  location: '<path d="M12 21s6.4-5.6 6.4-10.2a6.4 6.4 0 1 0-12.8 0C5.6 15.4 12 21 12 21z"/><circle cx="12" cy="10.8" r="2.4"/>',
+  'chart.bar': '<path d="M4.6 20.2V12M10.2 20.2V5.6M15.8 20.2v-6.6M21 20.2V9"/>',
+  'chart.bar.xaxis': '<path d="M5 17.4v-4.6M9.6 17.4V8.2M14.2 17.4v-6.6M18.8 17.4V5.6M3.4 20.4h17.2"/>',
+  'face.smiling': '<circle cx="12" cy="12" r="8.4"/><circle data-cut cx="9.4" cy="10.2" r="1"/><circle data-cut cx="14.6" cy="10.2" r="1"/><path data-cut d="M8.4 14.4a4.6 4.6 0 0 0 7.2 0"/>',
+  'figure.walk': '<circle cx="13.4" cy="4.6" r="1.8"/><path d="M12.6 8.2l-2.8 3 1.4 3.2-1 6M13.4 8.6l2.6 2.2.8 3.2M10.2 14.4l-2.8 1.4"/>',
+  'fork.knife': '<path d="M7 3.4v7a2 2 0 0 0 4 0v-7M9 10.6v10M16.6 3.4c-1.4 1.2-2 2.8-2 4.6s.8 2.8 2 3v9.6"/>',
+  'hand.tap': '<path d="M9.4 11.4V6.2a1.6 1.6 0 0 1 3.2 0v5.2M12.6 11v-1a1.5 1.5 0 0 1 3 0v1.6M15.6 11.8v-.6a1.5 1.5 0 0 1 3 0V15a5.4 5.4 0 0 1-5.4 5.4h-1.4a4.6 4.6 0 0 1-3.6-1.8l-2.4-3 .4-.5a1.8 1.8 0 0 1 2.4-.2l1.4 1.1"/>',
+  'circle.lefthalf.filled': '<circle cx="12" cy="12" r="8.4"/><path d="M12 3.6a8.4 8.4 0 0 0 0 16.8z" fill="currentColor" stroke="none"/>',
+  icloud: '<path d="M7.4 18.4h9.8a3.6 3.6 0 0 0 .4-7.2 5.4 5.4 0 0 0-10.4-1.2 3.7 3.7 0 0 0 .2 8.4z"/>',
+  'icloud.slash': '<path d="M7.4 18.4h9.8a3.6 3.6 0 0 0 .4-7.2 5.4 5.4 0 0 0-10.4-1.2 3.7 3.7 0 0 0 .2 8.4z"/><path data-cut d="M4.2 4.2l15.6 15.6"/>',
+  'person.2': '<circle cx="9.2" cy="8.4" r="3.2"/><path d="M3.4 19.4a5.8 5.8 0 0 1 11.6 0"/><path d="M15.6 6a3.2 3.2 0 0 1 0 6.4M16.8 14.4a5.8 5.8 0 0 1 3.8 5"/>',
+  'arrow.up.right': '<path d="M7.4 16.6L16.6 7.4M9.6 7.4h7v7"/>',
+  'arrow.down.circle': '<circle cx="12" cy="12" r="8.4"/><path data-cut d="M12 7.8v8.4M8.6 12.8L12 16.2l3.4-3.4"/>',
+  'heart.circle': '<circle cx="12" cy="12" r="8.4"/><path data-cut d="M12 16.4s-3.8-2.3-3.8-4.9a1.9 1.9 0 0 1 3.8-1 1.9 1.9 0 0 1 3.8 1c0 2.6-3.8 4.9-3.8 4.9z"/>',
+  textformat: '<path d="M3.6 18.4L8.4 6.4l4.8 12M5.4 14.6h6M14.4 18.4l3.2-7.6 3.2 7.6M15.6 16h4"/>',
+  shield: '<path d="M12 3.2l7 2.6v5.4c0 4.2-2.9 7.6-7 9.6-4.1-2-7-5.4-7-9.6V5.8z"/>',
+  key: '<circle cx="8.2" cy="12" r="3.6"/><path d="M11.8 12h8.6M18 12v3M15.4 12v2.2"/>',
+  'chevron.right': '<path d="M9 5l7 7-7 7"/>',
+  'chevron.left': '<path d="M15 5l-7 7 7 7"/>',
+  'chevron.down': '<path d="M5 9l7 7 7-7"/>',
+  'chevron.up': '<path d="M5 15l7-7 7 7"/>',
+  xmark: '<path d="M6 6l12 12M18 6L6 18"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  magnifyingglass: '<circle cx="11" cy="11" r="6"/><path d="M15.4 15.4L20 20"/>',
+  bell: '<path d="M12 3.2a4.8 4.8 0 0 0-4.8 4.8v3.6L5.6 15h12.8l-1.6-3.4V8A4.8 4.8 0 0 0 12 3.2z"/><path d="M9.8 18a2.2 2.2 0 0 0 4.4 0"/>',
+  'person.circle': '<circle cx="12" cy="12" r="8.6"/><circle data-cut cx="12" cy="10" r="2.6"/><path data-cut d="M6.9 18.4a5.6 5.6 0 0 1 10.2 0"/>',
+  house: '<path d="M12 3.8L3.8 11h2.7v9.2h11V11h2.7z"/>',
+  'square.stack': '<rect x="8" y="8" width="11" height="11" rx="2.6"/><path d="M15.4 5H7.6A2.6 2.6 0 0 0 5 7.6v7.8"/>',
+  // A cog, not a circle with spokes: spokes read as a sun at the size a row icon is drawn.
+  gear: '<path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-1.7-1L14.9 3.4h-4L10.5 6a7.6 7.6 0 0 0-1.7 1l-2.4-1-2 3.4L6.4 11a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 1.7 1l.4 2.6h4l.4-2.6a7.6 7.6 0 0 0 1.7-1l2.4 1 2-3.4z"/><circle cx="12" cy="12" r="3"/>',
+  trash: '<path d="M4.6 7h14.8"/><path d="M9.6 7V4.8h4.8V7"/><path d="M6.6 7l1 12.4h8.8L17.4 7"/><path d="M10.4 10.6v5.8M13.6 10.6v5.8"/>',
+  pencil: '<path d="M4.6 19.4l1-4.2 9.8-9.8 3.2 3.2-9.8 9.8z"/><path d="M13.4 6.6l3.2 3.2"/>',
+  checkmark: '<path d="M5 12.8l4.6 4.6L19 6.8"/>',
+  'arrow.left': '<path d="M19.6 12H4.4"/><path d="M10.2 6.2L4.4 12l5.8 5.8"/>',
+  'arrow.right': '<path d="M4.4 12h15.2"/><path d="M13.8 6.2L19.6 12l-5.8 5.8"/>',
+  ellipsis: '<circle cx="5.8" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18.2" cy="12" r="1.5" fill="currentColor" stroke="none"/>',
+  heart: '<path d="M12 19.6C12 19.6 4.4 15.2 4.4 9.9A3.7 3.7 0 0 1 12 8a3.7 3.7 0 0 1 7.6 1.9c0 5.3-7.6 9.7-7.6 9.7z"/>',
+  star: '<path d="M12 4l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.2-4.1 5.8-.8z"/>',
+  clock: '<circle cx="12" cy="12" r="8.4"/><path d="M12 7.2V12l3.4 2.1"/>',
+  calendar: '<rect x="3.6" y="5.6" width="16.8" height="14.8" rx="2.6"/><path d="M3.6 10.2h16.8"/><path d="M8.4 3.4v3.2M15.6 3.4v3.2"/>',
+  doc: '<path d="M6.4 3.6h7.2L18 8v12.4H6.4z"/><path d="M13.6 3.6V8H18"/>',
+  folder: '<path d="M3.6 7.6a2 2 0 0 1 2-2h3.6l2 2.4h7.2a2 2 0 0 1 2 2v8.4a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2z"/>',
+  // The shackle is an open arc that stands above the body. SF keeps it a stroke even in
+  // `lock.fill`, so it says `fill="none"` and the svg's own fill does not close it into a
+  // blob; the keyhole is detail inside the body and is cut.
+  lock: '<rect x="5.4" y="10.4" width="13.2" height="9.8" rx="2.6"/><path fill="none" d="M8.6 10.4V8a3.4 3.4 0 0 1 6.8 0v2.4"/><path data-cut d="M12 14v2.6"/>',
+  'info.circle': '<circle cx="12" cy="12" r="8.4"/><path data-cut d="M12 11v5.4"/><circle data-cut cx="12" cy="8" r="1.1" stroke-width="1.8"/>',
+  'exclamationmark.triangle': '<path d="M12 4.2l8.4 15.2H3.6z"/><path data-cut d="M12 9.4v4.4"/><circle data-cut cx="12" cy="16.8" r="1.1" stroke-width="1.8"/>',
+  'square.and.arrow.up': '<path d="M12 3.4v10.2"/><path d="M8.4 7L12 3.4 15.6 7"/><path d="M7.6 11H5.4v9.2h13.2V11h-2.2"/>',
+  'line.3.horizontal': '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  envelope: '<rect x="3.4" y="6" width="17.2" height="12" rx="2.6"/><path d="M4.2 8.2l7.8 5.4 7.8-5.4"/>',
+  phone: '<path d="M7 3.8l2.6 4-2 2a11.6 11.6 0 0 0 4.6 4.6l2-2 4 2.6V19a2 2 0 0 1-2.2 2C9.4 20.3 3.7 14.6 3 7.2A2 2 0 0 1 5 5z"/>',
+  camera: '<rect x="3.4" y="7.4" width="17.2" height="12.2" rx="2.6"/><path d="M9 7.4l1.4-2.6h3.2L15 7.4"/><circle cx="12" cy="13.5" r="3.2"/>',
+  photo: '<rect x="3.4" y="5" width="17.2" height="14" rx="2.6"/><path d="M4.4 16.4L9 11.8l3.4 3.4 2.6-2.6 4.6 4.2"/><circle cx="8.8" cy="9.4" r="1.4"/>',
+  'play.fill': '<path d="M7.6 4.8l11 7.2-11 7.2z" fill="currentColor" stroke="none"/>',
+  'pause.fill': '<rect x="7.2" y="4.8" width="3.6" height="14.4" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.2" y="4.8" width="3.6" height="14.4" rx="1.2" fill="currentColor" stroke="none"/>',
+  // Asked for by the Sakhi settings and data screens, which were drawing a placeholder
+  // square where each of these should be.
+  'arrow.counterclockwise': '<path d="M3.8 12a8.2 8.2 0 1 0 2.5-5.9"/><path d="M3.4 4.6v4.6h4.6"/>',
+  gift: '<rect x="3.2" y="9.6" width="17.6" height="10.8" rx="2"/><path d="M2.4 9.6h19.2v3.2H2.4z" fill="none"/><path d="M12 9.6v10.8"/><path d="M12 9.6C10.2 9.6 7.4 9.4 7.4 7.2a2.2 2.2 0 0 1 4.6-.6zM12 9.6c1.8 0 4.6-.2 4.6-2.4a2.2 2.2 0 0 0-4.6-.6z"/>',
+  ruler: '<rect x="1.8" y="8.2" width="20.4" height="7.6" rx="1.8" transform="rotate(-20 12 12)"/><path data-cut d="M7 8.6l1.2 2.6M10.4 7.4l2 4.2M13.8 6.2l1.2 2.6M17.2 5l2 4.2"/>',
+  scalemass: '<path d="M4.4 20.4l2.4-10.2a1.8 1.8 0 0 1 1.8-1.4h6.8a1.8 1.8 0 0 1 1.8 1.4l2.4 10.2z"/><path d="M9.4 8.8V7.4a2.6 2.6 0 0 1 5.2 0v1.4"/>',
+  cloud: '<path d="M7.2 18.4h9.6a4 4 0 0 0 .4-8 5.6 5.6 0 0 0-10.8-1.2 3.9 3.9 0 0 0 .8 9.2z"/>',
+  'checkmark.shield': '<path d="M12 3.2l7.2 2.6v6c0 4.6-3 7.6-7.2 9-4.2-1.4-7.2-4.4-7.2-9v-6z"/><path data-cut d="M8.8 11.8l2.4 2.4 4.2-4.6"/>',
+  'circle.dotted': '<circle cx="12" cy="12" r="8.6" stroke-dasharray="0.1 3.4"/>',
+  headphones: '<path d="M4.2 15.4v-3a7.8 7.8 0 0 1 15.6 0v3"/><rect x="2.8" y="14.2" width="4.4" height="6.4" rx="2.2"/><rect x="16.8" y="14.2" width="4.4" height="6.4" rx="2.2"/>',
+  'cup.and.saucer': '<path d="M5 6.4h11.2v5.8a5.6 5.6 0 0 1-11.2 0z"/><path d="M16.2 7.8h1.6a2.4 2.4 0 0 1 0 4.8h-1.6"/><path d="M3.2 19.8h15.6"/>',
+  'wand.and.stars': '<path d="M4.4 19.6L15.6 8.4"/><path d="M14.2 6.8l3 3"/><path d="M19 3l.9 2.1 2.1.9-2.1.9L19 9l-.9-2.1L16 6l2.1-.9zM7.4 3l.7 1.6 1.6.7-1.6.7L7.4 7.6 6.7 6l-1.6-.7L6.7 4.6z"/>',
+  'calendar.badge.plus': '<path d="M20.4 11.2V7.4a2.4 2.4 0 0 0-2.4-2.4H6A2.4 2.4 0 0 0 3.6 7.4v10.2A2.4 2.4 0 0 0 6 20h5.4"/><path d="M3.6 9.6h16.8M8 3.4v3.2M16 3.4v3.2"/><circle cx="17.6" cy="17.4" r="4"/><path d="M17.6 15.4v4M15.6 17.4h4"/>',
+  'rectangle.stack': '<rect x="3.2" y="9.6" width="17.6" height="10.8" rx="2.4"/><path d="M5.8 6.8h12.4M7.8 3.8h8.4"/>',
+  'sun.min': '<circle cx="12" cy="12" r="4.6"/><path d="M12 3.6v1.8M12 18.6v1.8M3.6 12h1.8M18.6 12h1.8"/>',
+  // The last three the onboarding flow asks for: a relation row, a contact field and the
+  // half-filled shield the privacy screen draws.
+  'figure.and.child.holdinghands': '<circle cx="7.4" cy="4.4" r="2"/><path d="M7.4 7.2L5.6 12l1.2.8v7.6"/><path d="M8.8 20.4v-5.6l-2-2"/><path d="M7.4 12.8h4.2"/><circle cx="16.4" cy="8.4" r="1.6"/><path d="M16.4 10.6l-1.4 3.4 1 .6v5.8"/><path d="M17.6 20.4v-4.2l-1.6-1.6"/><path d="M15 14h-3.4"/>',
+  'person.text.rectangle': '<rect x="2.6" y="4.4" width="18.8" height="15.2" rx="3"/><circle data-cut cx="8.4" cy="10.4" r="2"/><path data-cut d="M5.4 16a3.2 3.2 0 0 1 6 0"/><path data-cut d="M14.2 9.4h4.4M14.2 12.4h4.4M14.2 15.4h3"/>',
+  // SF Symbols draws a battery as the shell plus a bar inside it filled to the number in
+  // the name, so each level is its own shape rather than one shape with a prop.
+  'battery.25': '<rect x="2.2" y="8" width="16.6" height="8" rx="2.6"/><path d="M20.4 10.6v2.8" stroke-width="2.4"/><rect data-cut x="4" y="9.8" width="3.6" height="4.4" rx="1" fill="currentColor" stroke="none"/>',
+  'battery.50': '<rect x="2.2" y="8" width="16.6" height="8" rx="2.6"/><path d="M20.4 10.6v2.8" stroke-width="2.4"/><rect data-cut x="4" y="9.8" width="6.5" height="4.4" rx="1" fill="currentColor" stroke="none"/>',
+  'battery.75': '<rect x="2.2" y="8" width="16.6" height="8" rx="2.6"/><path d="M20.4 10.6v2.8" stroke-width="2.4"/><rect data-cut x="4" y="9.8" width="9.4" height="4.4" rx="1" fill="currentColor" stroke="none"/>',
+  'battery.100': '<rect x="2.2" y="8" width="16.6" height="8" rx="2.6"/><path d="M20.4 10.6v2.8" stroke-width="2.4"/><rect data-cut x="4" y="9.8" width="13" height="4.4" rx="1" fill="currentColor" stroke="none"/>',
+  // Asked for by Diet, which was drawing each of these inside its own pages. A shape drawn
+  // in a page is one page's guess; in here it is the same shape on every page that asks.
+  carrot: '<path d="M10.4 11.6l-6 7.2a1.8 1.8 0 0 0 2.4 2.6l7.4-5.8a8.4 8.4 0 0 0 3-6.6l-.2-2.6-2.6-.2a8.4 8.4 0 0 0-6.6 3z"/><path data-cut d="M12.4 13.6l2.4 2.4M9.6 15.8l2 2"/><path d="M16.6 7.4l1.8-2.4M18.8 9.2l2.8-.8M14.6 5.6l-.6-2.8"/>',
+  'square.and.pencil': '<path d="M19.6 12.8v5.6a2.4 2.4 0 0 1-2.4 2.4H5.6a2.4 2.4 0 0 1-2.4-2.4V6.8a2.4 2.4 0 0 1 2.4-2.4h5.6"/><path d="M15.4 4.2l4.4 4.4-7 7-4.8.4.4-4.8z"/>',
+  'frying.pan': '<path d="M2.6 11.4h12.8v2.2a6.4 6.4 0 0 1-12.8 0z"/><path d="M15.4 12.4h3.2a2.8 2.8 0 0 0 2.8-2.8V6.4"/>',
+  wifi: '<path d="M2.4 9.2a14.4 14.4 0 0 1 19.2 0"/><path d="M5.8 12.8a9.4 9.4 0 0 1 12.4 0"/><path d="M9.2 16.4a4.4 4.4 0 0 1 5.6 0"/><circle cx="12" cy="19.6" r="1.1" fill="currentColor" stroke="none"/>',
+  'wifi.slash': '<path d="M2.4 9.2a14.4 14.4 0 0 1 6.4-3.5M15.6 5.9a14.3 14.3 0 0 1 6 3.3"/><path d="M5.8 12.8a9.4 9.4 0 0 1 3.1-2M15.2 11a9.4 9.4 0 0 1 3 1.8"/><path d="M9.2 16.4a4.4 4.4 0 0 1 5.6 0"/><circle cx="12" cy="19.6" r="1.1" fill="currentColor" stroke="none"/><path d="M3.2 3.2l17.6 17.6"/>',
+  'exclamationmark.arrow.triangle.2.circlepath': '<path d="M3.8 11.4a8.2 8.2 0 0 1 13.6-5.6"/><path d="M20.2 12.6a8.2 8.2 0 0 1-13.6 5.6"/><path d="M14 5.4h3.8v3.8M10 18.6H6.2v-3.8"/><path d="M12 8.6v4.2"/><circle cx="12" cy="15.6" r="1" fill="currentColor" stroke="none"/>',
+  'moon.zzz': '<path d="M11.4 3.4a8.6 8.6 0 1 0 8.2 10.8A6.8 6.8 0 0 1 11.4 3.4z"/><path d="M15.6 3.2h3.2l-3.2 3.6h3.2" stroke-width="1.5"/>',
+  'moon.stars': '<path d="M11.4 3.4a8.6 8.6 0 1 0 8.2 10.8A6.8 6.8 0 0 1 11.4 3.4z"/><path d="M18.4 2.6l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7zM21.4 8.2l.4 1 1 .4-1 .4-.4 1-.4-1-1-.4 1-.4z"/>',
+  lightbulb: '<path d="M9 17.4a6 6 0 1 1 6 0v1.2a1.6 1.6 0 0 1-1.6 1.6h-2.8A1.6 1.6 0 0 1 9 18.6z"/><path data-cut d="M9.4 17.4h5.2"/><path d="M10.6 21.6h2.8"/>',
+  sunrise: '<circle cx="12" cy="13.6" r="3.6"/><path d="M12 3.2v3.6M12 3.2L9.8 5.6M12 3.2l2.2 2.4"/><path d="M4.8 13.6H2.6M21.4 13.6h-2.2M6.4 8.2L4.8 6.6M19.2 6.6l-1.6 1.6"/><path d="M2.6 19.4h18.8"/>',
+  'shield.lefthalf.filled': '<path d="M12 3.2l7.2 2.6v6c0 4.6-3 7.6-7.2 9-4.2-1.4-7.2-4.4-7.2-9v-6z"/><path d="M12 3.2v20.4" stroke="none"/><path d="M12 3.4L5.2 5.8v6c0 4.5 2.9 7.5 6.8 8.9z" fill="currentColor" stroke="none"/>'
+};
+
+// An unknown name is still an icon on the screen. Drawing nothing would read as a design
+// with a hole in it, so it draws a neutral mark that is clearly a placeholder and keeps the
+// name in data-symbol, which is the part that matters.
+const UNKNOWN = '<rect x="4" y="4" width="16" height="16" rx="4.6"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>';
+
+// Material asks for the same icon by another word.
+const ALIASES = {
+  chevron_right: 'chevron.right',
+  chevron_left: 'chevron.left',
+  expand_more: 'chevron.down',
+  expand_less: 'chevron.up',
+  keyboard_arrow_down: 'chevron.down',
+  keyboard_arrow_right: 'chevron.right',
+  close: 'xmark',
+  add: 'plus',
+  search: 'magnifyingglass',
+  notifications: 'bell',
+  account_circle: 'person.circle',
+  home: 'house',
+  layers: 'square.stack',
+  settings: 'gear',
+  delete: 'trash',
+  delete_outline: 'trash',
+  edit: 'pencil',
+  check: 'checkmark',
+  done: 'checkmark',
+  arrow_back: 'arrow.left',
+  arrow_forward: 'arrow.right',
+  more_vert: 'ellipsis',
+  more_horiz: 'ellipsis',
+  favorite: 'heart',
+  favorite_border: 'heart',
+  star_outline: 'star',
+  grade: 'star',
+  schedule: 'clock',
+  calendar_today: 'calendar',
+  event: 'calendar',
+  description: 'doc',
+  folder_open: 'folder',
+  info: 'info.circle',
+  warning: 'exclamationmark.triangle',
+  share: 'square.and.arrow.up',
+  menu: 'line.3.horizontal',
+  mail: 'envelope',
+  email: 'envelope',
+  call: 'phone',
+  photo_camera: 'camera',
+  image: 'photo',
+  play_arrow: 'play.fill',
+  pause: 'pause.fill'
+};
+
+// What a `.fill` symbol really is.
+//
+// SF Symbols draws a filled symbol as the container filled solid and the detail inside it
+// cut back out, not as the whole drawing turned into a blob. Filling every part of
+// `heart.circle.fill` gave a solid disc with the heart lost inside it. So a part that is
+// detail rather than container is marked `data-cut` in the table above: filled, it is
+// redrawn over the solid container in the cut colour, which is the surface the icon sits
+// on; as an outline, the mark is simply dropped and the part draws like any other.
+const CUT = 'var(--db-icon-cut, #FFFFFF)';
+
+const asked = String(name);
+// iOS names a solid icon with a .fill suffix, so house.fill is the house shape, filled.
+const suffixed = asked.endsWith('.fill');
+const base = suffixed ? asked.slice(0, -5) : asked;
+const key = SHAPES[asked] ? asked : (SHAPES[ALIASES[asked]] ? ALIASES[asked] : (SHAPES[base] ? base : null));
+const shape = key ? SHAPES[key] : UNKNOWN;
+
+// Filling only changes a shape drawn as a closed outline, a house or a heart. On a chevron
+// or a checkmark there is nothing to fill, and those are never asked for filled.
+const solid = filled || suffixed;
+const drawn = solid
+  ? shape.replace(/\sdata-cut(?:="[^"]*")?/g, ` fill="none" stroke="${CUT}"`)
+  : shape.replace(/\sdata-cut(?:="[^"]*")?/g, '');
+---
+
+<svg
+  data-symbol={asked}
+  data-unknown={key ? undefined : 'true'}
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill={solid ? color : 'none'}
+  stroke={color}
+  stroke-width={weight}
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+><Fragment set:html={drawn} /></svg>
+
+<style>
+  svg {
+    /* An inline svg sits on the text baseline and leaves a few pixels under it, which pulls
+       a row of icons out of line with its label. */
+    display: block;
+    flex: 0 0 auto;
+  }
+</style>

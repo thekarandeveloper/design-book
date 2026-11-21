@@ -14,7 +14,7 @@ cd "$here"
 version="$(node -p "require('./package.json').version")"
 # The workspace's own build folder, never a repo: `make` and every other script here
 # put what they make in the same place.
-build="$here/../../../.build"
+build="$here/../.build"
 out="$build/design-book-$version.vsix"
 mkdir -p "$build"
 

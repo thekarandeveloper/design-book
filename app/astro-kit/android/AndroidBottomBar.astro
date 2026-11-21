@@ -1,0 +1,143 @@
+---
+// Material 3's navigation bar: the app's own tabs at the bottom of the screen.
+//
+// The one thing got wrong without it is the active indicator. A Material tab marks the
+// current item with a 64 by 32 pill behind the icon, and that pill is what tells a Material
+// bar from an iOS one across a room. An iOS tab bar only colours the icon, so a bar built
+// that way looks like the wrong platform however right the icons are.
+//
+// This is the app's bar. The system's bar is AndroidNavBar and it sits below this one.
+
+import Icon from '../base/Icon.astro';
+
+const {
+  items = [],
+  scheme = 'light',
+  labels = 'always'
+} = Astro.props;
+---
+
+<nav class="tabs" data-scheme={scheme} data-labels={labels}>
+  {items.map(item => (
+    <span class="tab" data-active={item.active ? 'true' : 'false'}>
+      <span class="pill">
+        <Icon name={item.icon} size={24} color="currentColor" filled={item.active} />
+        {item.badge && (
+          <span class="badge" data-dot={item.badge === true ? 'true' : 'false'}>
+            {item.badge === true ? '' : item.badge}
+          </span>
+        )}
+      </span>
+      <span class="label">{item.label}</span>
+    </span>
+  ))}
+</nav>
+
+<style>
+  .tabs {
+    /* Pinned to the screen, above whatever the system keeps at the bottom, which the Screen
+       publishes as `--db-safe-bottom`. A bar left in the flow lands in the middle of a short
+       screen, which is where every page that drew its own bar ended up. */
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: var(--db-safe-bottom, 0px);
+    /* 80 tall is Material's navigation bar. The pill inside is 64 by 32. */
+    --tabs-height: var(--db-android-navbar-h, 80px);
+    --tab-pill-w: var(--db-android-indicator-w, 64px);
+    --tab-pill-h: var(--db-android-indicator-h, 32px);
+    --tab-label: var(--db-android-label-sm, 12px);
+    --tab-ink: var(--db-text-secondary, #4E6177);
+
+    height: var(--tabs-height);
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    background: var(--db-surface, #FFFFFF);
+    font-family: var(--db-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+    /* 12 above the pill and 16 under the label is how 32 plus 16 of type makes 80. */
+    padding: var(--db-space-3, 12px) 0 var(--db-space-4, 16px);
+    flex: none;
+  }
+
+  .tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--db-space-1, 4px);
+    color: var(--tab-ink);
+    min-width: 0;
+  }
+
+  .pill {
+    width: var(--tab-pill-w);
+    height: var(--tab-pill-h);
+    border-radius: var(--db-radius-full, 999px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    flex: none;
+  }
+
+  /* The indicator is a tint of the action colour, not the action colour itself, because the
+     icon sits on top of it and has to stay readable. */
+  .tab[data-active='true'] {
+    --tab-ink: var(--db-primary, #2E7BF6);
+  }
+
+  .tab[data-active='true'] .pill {
+    background: color-mix(in srgb, var(--db-primary, #2E7BF6) 16%, transparent);
+  }
+
+  .tab[data-active='true'] .label {
+    color: var(--db-text, #152233);
+    font-weight: 600;
+  }
+
+  .label {
+    font-size: var(--tab-label);
+    font-weight: 500;
+    line-height: 16px;
+    letter-spacing: 0.01em;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* `selected` shows only the current item's label, `none` shows none. The label is hidden
+     rather than removed so every tab keeps the same height and the icons stay in a line. */
+  .tabs[data-labels='none'] .label,
+  .tabs[data-labels='selected'] .tab[data-active='false'] .label {
+    visibility: hidden;
+  }
+
+  /* A count sits at the top right of the icon; a plain true is the small dot Material uses
+     when there is nothing to count. */
+  .badge {
+    position: absolute;
+    top: 0;
+    left: 60%;
+    min-width: var(--db-space-4, 16px);
+    height: var(--db-space-4, 16px);
+    padding: 0 var(--db-space-1, 4px);
+    box-sizing: border-box;
+    border-radius: var(--db-radius-full, 999px);
+    background: var(--db-danger, #DC2626);
+    color: var(--db-on-primary, #FFFFFF);
+    font-size: var(--db-android-badge, 11px);
+    font-weight: 600;
+    line-height: var(--db-space-4, 16px);
+    text-align: center;
+  }
+
+  .badge[data-dot='true'] {
+    min-width: var(--db-space-2, 8px);
+    width: var(--db-space-2, 8px);
+    height: var(--db-space-2, 8px);
+    padding: 0;
+    top: var(--db-space-1, 4px);
+  }
+</style>

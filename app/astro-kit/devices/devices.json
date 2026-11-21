@@ -1,0 +1,96 @@
+{
+  "_": "Where the screen is inside each device photograph, measured off the image itself. `image` is the PNG's size in pixels and `screen` is [x, y, width, height] of the hole in it, also in pixels. `size` is what that screen is in points. `over` says whether the photograph goes over the page (its screen is cut out) or under it (its screen is filled in). The board and the page both read this file, so a frame is never a different size from what is drawn in it.",
+  "iphone": {
+    "file": "iphone.png",
+    "image": [
+      824,
+      1623
+    ],
+    "screen": [
+      70,
+      70,
+      683,
+      1482
+    ],
+    "size": [
+      393,
+      852
+    ],
+    "radius": 96,
+    "safe": [
+      59,
+      34
+    ],
+    "over": true
+  },
+  "ipad": {
+    "file": "ipad.png",
+    "image": [
+      1711,
+      1219
+    ],
+    "screen": [
+      72,
+      69,
+      1567,
+      1080
+    ],
+    "size": [
+      1210,
+      834
+    ],
+    "radius": 31,
+    "safe": [
+      24,
+      20
+    ],
+    "over": true
+  },
+  "laptop": {
+    "file": "laptop.png",
+    "image": [
+      2075,
+      1216
+    ],
+    "screen": [
+      251,
+      102,
+      1563,
+      978
+    ],
+    "size": [
+      1280,
+      800
+    ],
+    "radius": 0,
+    "safe": [
+      0,
+      0
+    ],
+    "over": false
+  },
+  "web": {
+    "file": "laptop.png",
+    "image": [
+      2075,
+      1216
+    ],
+    "screen": [
+      251,
+      102,
+      1563,
+      978
+    ],
+    "size": [
+      1440,
+      900
+    ],
+    "radius": 0,
+    "safe": [
+      0,
+      0
+    ],
+    "over": false,
+    "_": "A web page is shown on the machine it is read on, so `web` is the laptop photograph. 1440 x 900 because that is the width these pages are drawn at and the hole is 1563 x 978, an aspect of 1.598 against 1.600: the page fills it."
+  }
+}

@@ -1,0 +1,108 @@
+---
+// A button at the sizes iOS draws one.
+//
+// The height is the part that gets guessed: a button is 50 tall at large, 44 at regular,
+// which is the touch target, and 34 at small. A filled button is the action colour with
+// white text and a pill radius.
+
+import Icon from '../base/Icon.astro';
+
+interface Props {
+  label?: string;
+  variant?: 'filled' | 'tinted' | 'plain' | 'bordered';
+  size?: 'small' | 'regular' | 'large';
+  /** A symbol name for an icon before the label. */
+  icon?: string;
+  /** Full width, which is how a button at the bottom of a screen is drawn. */
+  full?: boolean;
+  destructive?: boolean;
+  disabled?: boolean;
+}
+
+const {
+  label = '',
+  variant = 'filled',
+  size = 'regular',
+  icon,
+  full = false,
+  destructive = false,
+  disabled = false
+} = Astro.props;
+---
+
+<button
+  class="btn"
+  type="button"
+  data-variant={variant}
+  data-size={size}
+  data-full={String(full)}
+  data-destructive={String(destructive)}
+  disabled={disabled}
+>
+  {icon && <Icon name={icon} size={size === 'small' ? 15 : 18} color="currentColor" />}
+  {label && <span class="label">{label}</span>}
+</button>
+
+<style>
+  .btn {
+    /* One colour decides the whole button, so destructive only has to change this. */
+    --db-ios-btn-accent: var(--db-primary, #2E7BF6);
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    gap: var(--db-space-2, 8px);
+    padding: 0 var(--db-space-5, 20px);
+    border: none;
+    border-radius: var(--db-radius-full, 999px);
+    background: transparent;
+    font-family: var(--db-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+    font-weight: 600;
+    line-height: 1;
+    /* A frame is a picture, not a page to click on. */
+    cursor: default;
+  }
+
+  .btn[data-destructive='true'] { --db-ios-btn-accent: var(--db-danger, #DC2626); }
+  .btn[data-full='true'] { width: 100%; }
+
+  .btn[data-size='large'] {
+    height: var(--db-ios-btn-large, 50px);
+    font-size: var(--db-ios-body, 17px);
+  }
+  .btn[data-size='regular'] {
+    height: var(--db-ios-btn-regular, 44px);
+    font-size: var(--db-ios-body, 17px);
+  }
+  .btn[data-size='small'] {
+    height: var(--db-ios-btn-small, 34px);
+    padding: 0 var(--db-space-3, 12px);
+    font-size: var(--db-ios-subheadline, 15px);
+  }
+
+  .btn[data-variant='filled'] {
+    background: var(--db-ios-btn-accent);
+    color: var(--db-on-primary, #FFFFFF);
+  }
+
+  /* Tinted is the accent at a fraction of its strength, so it keeps working on a surface of
+     any shade and in dark mode without a second colour. */
+  .btn[data-variant='tinted'] {
+    background: color-mix(in srgb, var(--db-ios-btn-accent) 15%, transparent);
+    color: var(--db-ios-btn-accent);
+  }
+
+  .btn[data-variant='plain'] {
+    padding: 0 var(--db-space-2, 8px);
+    color: var(--db-ios-btn-accent);
+  }
+
+  .btn[data-variant='bordered'] {
+    border: var(--db-border-width, 1px) solid var(--db-border, #D8E3EF);
+    color: var(--db-ios-btn-accent);
+  }
+
+  /* iOS dims a disabled button rather than greying every part of it separately. */
+  .btn:disabled { opacity: var(--db-ios-disabled, 0.4); }
+</style>
