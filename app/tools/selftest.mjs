@@ -184,6 +184,41 @@ await runSetup({
 ok('a board with no pages at all still gets one to look at',
   fs.existsSync(path.join(bare, '.designbook', 'pages', '01-screen.astro')));
 
+// ── a converted screen is an Astro page ───────────────────────────────────
+//
+// Every frame should go through one compiler. A `.html` page does not: it is served raw
+// from a side route, so it gets no kit, no tokens and no rebuild on save. Setup writes
+// `.astro` now. Somebody else's markup is still theirs, though, and Astro reads `{` as an
+// expression, so a document the compiler will not take stays `.html` rather than becoming
+// a frame that shows a compile error.
+
+console.log('\nConverting a screen');
+const conv = path.join(temp, 'convert');
+fs.mkdirSync(path.join(conv, '.designbook'), { recursive: true });
+fs.writeFileSync(path.join(conv, 'plain.html'), `<!doctype html>
+<html><head><meta charset="utf-8"><title>Plain</title></head>
+<body><div class="card">a screen the repo already had</div></body></html>
+`);
+fs.writeFileSync(path.join(conv, 'braces.html'), `<!doctype html>
+<html><head><meta charset="utf-8"><title>Braces</title></head>
+<body><p>a price of {49} and a { dangling brace</p></body></html>
+`);
+await runSetup({
+  repoRoot: conv,
+  studioRoot: path.join(conv, '.designbook'),
+  boardFile: path.join(conv, 'Board.designbook'),
+  name: 'Convert',
+  canCompile: true,
+  say: () => {}
+});
+const convPages = fs.readdirSync(path.join(conv, '.designbook', 'pages'));
+ok('a screen the repo had becomes an Astro page',
+  convPages.some(f => /plain\.astro$/.test(f)), convPages.join(' '));
+ok('and nothing is left as .html that Astro would take',
+  !convPages.some(f => /plain\.html$/.test(f)), convPages.join(' '));
+ok('a document Astro will not take stays .html',
+  convPages.some(f => /braces\.html$/.test(f)), convPages.join(' '));
+
 // ── the board's own history, and the switch that turns it off ─────────────
 //
 // The board commits its files as you draw. That is the point of the feature and a

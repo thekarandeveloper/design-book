@@ -564,12 +564,20 @@ function mountPage(screen, { serial, globalCss, tailwind }) {
   </head>
   <body>
     <div id="root"></div>
-    <script>window.__designbook = ${asked};</script>
-    <script type="module" src="/src/mount.js"></script>
+    <!--
+      is:inline on both, because this is an Astro page now and Astro would otherwise take
+      an inline script and serve it as its own module. That changes when it runs and what
+      its address is, and this shell depends on both: window.__designbook has to be set
+      before mount.js reads it, and the board rewrites a root-absolute src to the
+      compiler's origin on the way out. Left inline, the shell behaves exactly as it did
+      when this file was .html.
+    -->
+    <script is:inline>window.__designbook = ${asked};</script>
+    <script is:inline type="module" src="/src/mount.js"></script>
   </body>
 </html>
 `;
-  return { file: `${serial}-${slug(name)}.html`, ext: 'html', text };
+  return { file: `${serial}-${slug(name)}.astro`, ext: 'astro', text };
 }
 
 // ── what a screen is ──────────────────────────────────────────────────────
@@ -651,7 +659,36 @@ function htmlPage(screen, { serial, repoRoot }) {
     body = body.replace(/<title>[^<]*<\/title>/i, `<title>${escape(title)}</title>`);
   }
 
-  return { file: `${serial}-${slug(titleFor(screen.file, meta.title))}.html`, ext: 'html', text: body };
+  // A page of the board is an Astro page, so that one server compiles every frame: the
+  // kit, the project's own tokens, scoped styles and a rebuild on save. A `.html` page is
+  // none of that. It is served raw from a side route, outside the compiler entirely, and
+  // that is why half a board could never use a component or see a token change.
+  //
+  // This is somebody else's markup, though, not ours. Astro reads `{` as an expression,
+  // so a page carrying one in its text is a page Astro will not take, and a frame that
+  // does not compile is worse than a frame that is not in the kit. So it is offered to
+  // the compiler first and kept as `.html` when the compiler says no.
+  const stem = `${serial}-${slug(titleFor(screen.file, meta.title))}`;
+  return astroWillTake(body)
+    ? { file: `${stem}.astro`, ext: 'astro', text: body }
+    : { file: `${stem}.html`, ext: 'html', text: body };
+}
+
+// Whether this document means the same thing as an Astro page.
+//
+// Not whether it compiles. It does compile, which is the trap: Astro reads `{...}` in
+// markup as an expression, so a price written `{49}` renders as `49` with the braces
+// gone, and `{` on its own swallows what follows it. The compiler reports nothing for
+// any of that, so the only safe test is whether there is a brace in the markup at all.
+//
+// Style and script bodies are not expressions to Astro, and CSS is made of braces, so
+// they come out before looking. Conservative on purpose: a page kept as `.html` is a page
+// that works the way it always did, and the project can be converted by hand later.
+function astroWillTake(text) {
+  const markup = text
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '');
+  return !/[{}]/.test(markup);
 }
 
 // Where a root absolute url lands, looked up rather than guessed. A framework serves one

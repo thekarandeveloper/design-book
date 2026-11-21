@@ -152,6 +152,12 @@ do not make it a copy.
 Older boards hold `.html` pages with `canvas:` ids. They still render; nothing new is
 written that way, and one being edited is rewritten as `.astro`.
 
+One exception, and it is setup's, not yours. A screen the repo already had is converted to
+`.astro` so that one compiler draws every frame. Astro reads `{...}` in markup as an
+expression, so a document carrying a brace in its text would quietly draw something else:
+`{49}` renders as `49`. Those are kept as `.html` instead. If you meet one, it is not an
+oversight; converting it by hand means dealing with its braces first.
+
 ## A page is written in components
 
 A page in `.designbook/pages` is an `.astro` file, compiled by the board itself. Do not write
