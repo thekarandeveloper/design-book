@@ -287,6 +287,35 @@ if (started) {
   const relative = [...one.html.matchAll(/\ssrc="(\/[^"]*)"/g)].map(m => m[1]);
   ok('everything it fetches points at the compiler', relative.length === 0, relative.slice(0, 3).join(' '));
 
+  // A page's own scoped styles: that they compile at all, and that editing them shows.
+  //
+  // The worst fault this tool has had (KNOWN-ISSUES 1). The pages are reached through a
+  // symlink, Astro compiled the page under one path and asked for its style under the
+  // resolved one, and the two ids never met: "No cached compile metadata found". The
+  // markup updated on every save and the styles never did, with nothing said anywhere.
+  fs.writeFileSync(path.join(pages, '03-styled.astro'), `---
+import Screen from '@kit/base/Screen.astro';
+import Text from '@kit/base/Text.astro';
+---
+<Screen title="Styled" width={393} height={852}>
+  <div class="hdr"><Text size={17}>hello</Text></div>
+</Screen>
+<style>
+  .hdr { display: grid; }
+</style>
+`);
+  await new Promise(r => setTimeout(r, 600));
+  const styled = await get('/03-styled');
+  ok('a page\'s own scoped style compiles', /\.hdr\[data-astro-cid-[^\]]+\]\{display:grid/.test(styled.html.replace(/\s+/g, '')),
+    (styled.html.match(/\.hdr[^}]{0,60}}/) || ['not on the page'])[0]);
+
+  fs.writeFileSync(path.join(pages, '03-styled.astro'),
+    fs.readFileSync(path.join(pages, '03-styled.astro'), 'utf8').replace('display: grid', 'display: flex'));
+  await new Promise(r => setTimeout(r, 900));
+  const restyled = await get('/03-styled');
+  ok('and editing it shows on the next render', /display:flex/.test(restyled.html.replace(/\s+/g, '')),
+    (restyled.html.match(/\.hdr[^}]{0,60}}/) || ['not on the page'])[0]);
+
   const two = await get('/02-android');
   ok('an Android page answers', two.status === 200);
   ok('at its own size', /designbook-width" content="382"/.test(two.html),

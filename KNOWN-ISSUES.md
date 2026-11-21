@@ -22,13 +22,25 @@ three controls vertically down the middle of the sheet. The markup changes in th
 took effect on every save.
 
 Does not fix it: saving again, `POST /__api/check`, `POST /__api/setup`, deleting
-`.designbook/.working`, writing the frame id into `.designbook/.check`.
+`.designbook/.working`, writing the frame id into `.designbook/.check`. Nothing did,
+because nothing on that list was the problem.
 
-Works around it: put the rules in a **part** instead, inside `<style is:global>`, and let
-the page carry markup only. A part's styles recompile reliably.
+**Fixed on 2026-11-21.** The board's pages are reached through a symlink, and Vite
+resolves a module id to its real path. So Astro compiled the page under the symlink path
+and was then asked for that page's `<style>` under the resolved path, which to it is a
+different module: *"No cached compile metadata found for `01-p.astro?astro&type=style`.
+The main Astro module should have compiled and filled the metadata first."* The page's own
+styles were never compiled at all. The markup came from the page module, which was fine,
+which is exactly why only the styles went stale and nothing anywhere said so.
 
-Worth fixing properly, because the workaround pushes every page's styles into shared global
-CSS, which is the opposite of what scoped styles are for.
+`resolve.preserveSymlinks: true` in the board's Astro config. Both ids are then the same
+id. Two tests in `app/tools/selftest.mjs` hold it: that a scoped style compiles, and that
+editing it shows on the next render. Both fail without the line.
+
+**The workaround is withdrawn.** Putting the rules in a part inside `<style is:global>`
+was the only thing that worked, and it pushed every page's styles into shared global CSS,
+which is the opposite of what scoped styles are for and made item 5 bite more often. Write
+scoped styles on the page now.
 
 ## 2. A part's scoped styles cannot reach slotted markup
 

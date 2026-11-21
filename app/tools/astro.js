@@ -222,6 +222,13 @@ export class AstroSource {
               hmr: { host: '127.0.0.1', port: hmr, protocol: 'ws' }
             },
             resolve: {
+              // The pages are reached through a symlink, and Vite resolves a module id to
+              // its real path by default. Astro then compiled the page under one id and
+              // asked for its <style> under the other, found no compile metadata for it,
+              // and served the page with no styles of its own at all. Markup updated on
+              // every save and styles never did, silently (KNOWN-ISSUES 1). Keeping the
+              // symlink path means both ids are the same id.
+              preserveSymlinks: true,
               alias: {
                 '@kit': path.join(this.root, 'src', 'kit'),
                 '@board': path.join(this.root, 'src', 'board')
