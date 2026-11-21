@@ -426,7 +426,31 @@ export function Board({
         // two pixels for a whole turn of the wheel, which reads as not scrolling at all.
         const screen = view.document.querySelector('[data-scrolls]');
         const target = screen || view;
-        target.scrollBy({ left: ev.deltaX * unit, top: ev.deltaY * unit, behavior: 'instant' });
+
+        // A page with nowhere left to go leaves the wheel to the board.
+        //
+        // The paragraph above promised this and the code never did it. Once a frame was
+        // chosen it swallowed every notch: at the bottom of a page, and on any page with
+        // nothing to scroll at all, the wheel did nothing whatsoever. Not a scroll, not a
+        // pan, not a zoom. The only way to move the board again was to deselect the
+        // frame, which nobody would guess.
+        //
+        // It bites hardest on a frame that has only just appeared, because a page whose
+        // height has not been measured yet counts as scrolling, so this is the state
+        // every frame passes through.
+        const box = target === view ? view.document.scrollingElement : target;
+        const room = box ? box.scrollHeight - box.clientHeight : 0;
+        const down = ev.deltaY * unit;
+        const across = ev.deltaX * unit;
+        const stuck = !box
+          || room <= 1
+          || (down < 0 && box.scrollTop <= 0)
+          || (down > 0 && box.scrollTop >= room - 1);
+        // Sideways counts as somewhere to go, so a wide page still takes the wheel.
+        const sideways = box && across && box.scrollWidth - box.clientWidth > 1;
+        if (stuck && !sideways) return false;
+
+        target.scrollBy({ left: across, top: down, behavior: 'instant' });
         return true;
       } catch (_) {}
       real.classList.add('is-scrolling');
@@ -658,7 +682,15 @@ export function Board({
               width: f.width,
               transform: isDragging ? `translate(${drag.dx}px, ${drag.dy}px)` : undefined
             }}
-            onPointerDown={() => { if (f.id !== selected) { select(f.id); centreOn(f.id); } }}
+            // Choosing a frame does not move the board. It used to bring the frame into
+            // the middle at a zoom it fits, which threw away wherever you had got to:
+            // you line two frames up to compare them, click one, and the other is gone.
+            // Ctrl or Cmd with the click is how you ask for it to be fitted, and the 2
+            // key still fits whatever is chosen.
+            onPointerDown={ev => {
+              if (f.id !== selected) select(f.id);
+              if (ev.ctrlKey || ev.metaKey) centreOn(f.id);
+            }}
             onPointerEnter={() => { clearTimeout(warming.current); warming.current = setTimeout(() => warmAhead(f), 350); }}
             onPointerLeave={() => clearTimeout(warming.current)}
             onDoubleClick={() => setInside(f.id)}
